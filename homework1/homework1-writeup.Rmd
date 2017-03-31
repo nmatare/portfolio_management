@@ -1,0 +1,202 @@
+---
+title: "Portfolio Managment: Homework 1"
+author: "Gal Skarishevsky, Nathan Matare, Lior, Sahaf"
+date: "March 30, 2017"
+output: pdf_document
+urlcolor: blue
+graphics: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NA, message = FALSE,
+                      fig.width = 6, fig.height = 4.5, fig.align = "right")
+```
+
+```{r Load Config, include = FALSE, echo = FALSE, results = 'hide'}
+
+options("width" = 250)
+options(scipen  = 999)
+options(digits  = 003)
+
+library(xts); library(zoo); library(e1071); library(ggplot2); library(knitr)
+
+set.seed(666) # the devils seed
+
+username <- Sys.info()[["user"]]
+dir <- paste("/home/", username, "/Documents/Education/Chicago_Booth/Classes/35120_Portfolio_Management/portfolio_management/homework1", sep = "")
+setwd(dir)
+```
+
+# 1. Load Data
+
+We write the function '\texttt{getReturns}' that loads the data into our R environment.
+
+```{r load data, include = TRUE, echo = TRUE}
+
+getReturns <- function(name){
+returns <- read.csv(name, skip = 4, sep = "\t", header = FALSE)
+				
+if(name == 'returns_annual.txt') 
+	returns <- as.xts(returns[ ,-1], 
+					      order.by = as.Date(as.character(returns[,1]), format = "%Y"))
+else 
+	returns <- as.xts(returns[ ,-1], 
+			          order.by = as.Date(as.character(returns[,1]), format = "%Y%m%d"))
+				
+colnames(returns) <- c("SP500_rtrn", "BOND_rtrn")
+return(returns)
+}
+
+daily <- getReturns('returns_daily.txt')
+monthly <- getReturns('returns_monthly.txt')
+annually <- getReturns('returns_annual.txt')
+
+```
+
+# 2 and 3. Estimate basic statistics
+
+We write the function '\texttt{getStats}' that computes the means, variances, standard deviations, covariances, correlations, skewness, and kurtosis of each time series at all three frequences.
+
+```{r getStats1, include = TRUE, echo = FALSE}
+getStats <- function(DF){
+				stock <- DF$SP500_rtrn
+				bond <- DF$BOND_rtrn
+
+				stats <- data.frame(
+
+							stock = c(	mean = mean(stock), var = var(stock), 
+										sd = sd(stock), skew = skewness(stock), 
+										kurt = kurtosis(stock)
+									),
+
+							bond  = c(	mean = mean(bond), var = var(bond), 
+										sd = sd(bond), skew = skewness(bond), 
+										kurt = kurtosis(bond)
+									)
+
+				)
+
+				shape <- c(cov = cov(stock, bond), cor = cor(stock, bond))
+				return(list(stats = stats, shape = shape))
+}
+```
+
+```{r getStats2, include = TRUE, echo = FALSE}
+
+kable(getStats(daily)$stats, digits = 4, caption = "Daily")
+kable(t(getStats(daily)$shape), digits = 6)
+
+kable(getStats(monthly)$stats, digits = 4)
+kable(t(getStats(monthly)$shape), digits = 6, caption = "Monthly")
+
+kable(getStats(annually)$stats, digits = 4)
+kable(t(getStats(annually)$shape), digits = 6, caption = "Annually")
+
+```
+
+\newpage
+# 4. Histograms
+
+None of frequencies (daily, monthly or annually) are normally distributed. We observe greater non-normality the larger the time frequencies become. See the below histograms. The S&P500 returns are graphed in blue while bonds are graphed in red.
+
+```{r do Hist, include = TRUE, echo = FALSE, fig.height=4.5, fig.width=8.5, fig.align='center'}
+
+ggplot(data = daily) +
+	geom_histogram(aes(SP500_rtrn), fill = "blue", color = "green", alpha = 0.5) +
+	geom_histogram(aes(BOND_rtrn), fill = "red", color = "red", alpha = 0.5)
+
+ggplot(data = monthly) +
+	geom_histogram(aes(SP500_rtrn), fill = "blue", color = "green", alpha = 0.5) +
+	geom_histogram(aes(BOND_rtrn), fill = "red", color = "red", alpha = 0.5)
+
+ggplot(data = annually) +
+	geom_histogram(aes(SP500_rtrn), fill = "blue", color = "green", alpha = 0.5) +
+	geom_histogram(aes(BOND_rtrn), fill = "red", color = "red", alpha = 0.5)
+
+```
+
+# 5. Compute CIs
+
+We write the function '\texttt{getADVStats}' that computes the upper and lower confidence intervals for a period of one, and a rolling arithmetic period of thirty. 
+
+```{r getCIs, include = TRUE, echo = TRUE}
+
+getADVStats <- function(DF){
+stock <- DF$SP500_rtrn
+bond <- DF$BOND_rtrn
+
+error <- qnorm(0.975) * sd(stock) / sqrt(NROW(stock))
+CI_1 <- c(lower = mean(stock) - error, upper = mean(stock) + error)
+
+stock_30 <- na.omit(rollapply(stock, width = 30, mean))
+error_30 <- qnorm(0.975) * sd(stock_30) / sqrt(NROW(stock_30))
+CI_30 <- c(lower = mean(stock_30) - error_30, upper = mean(stock_30) + error_30)
+return(data.frame(period_1 = CI_1, period_30 = CI_30))
+}
+```
+
+
+```{r getCIs2, include = TRUE, echo = FALSE}
+
+kable(getADVStats(daily), digits = 6, caption = "Daily")
+kable(getADVStats(monthly), digits = 6, caption = "Monthly")
+kable(getADVStats(annually), digits = 6, caption = "Annually")
+
+```
+
+# 6. Compute Absolute Shortfalls
+
+We write the function '\texttt{getABSshortfall}' that computes the probability that the return over the next period will be lower than a specified threshold parameters, k. 
+
+```{r absShortfalls, include = TRUE, echo = TRUE}
+
+getABSshortfall <- function(DF){
+	stock <- DF$SP500_rtrn
+	bond <- DF$BOND_rtrn
+
+	ks <- c(-0.20, -0.10, 0, 0.10, 0.20)
+	out <- matrix(NA, 5, 2, dimnames = list(ks, c("stock", "bond")))
+
+	for(k in 1:NROW(out)){
+			p <- as.numeric(rownames(out)[k])
+			out[k, 1] <- pnorm(p, mean = mean(stock), sd = sd(stock))
+			out[k, 2] <- pnorm(p, mean = mean(bond), sd = sd(bond))
+	}
+
+	return(out)
+}
+```
+
+```{r absShortfalls2, include = TRUE, echo = FALSE}
+
+kable(getABSshortfall(daily), digits = 6, caption = "Daily")
+kable(getABSshortfall(monthly), digits = 6, caption = "Monthly")
+kable(getABSshortfall(annually), digits = 6, caption = "Annually")
+
+```
+
+# 7. Stock Return Probability
+
+We write the function '\texttt{getStockBondProb}' that computes the probability that the stock return is lower than the bond return for a given frequency. 
+
+```{r getStockBondProb, include = TRUE, echo = TRUE}
+
+getStockBondProb <- function(DF){
+				stock <- DF$SP500_rtrn
+				bond <- DF$BOND_rtrn
+        
+				# number of times stock return is lower than bond return
+				num_times <- length(which(stock < bond)) 
+				# number of times event happened over number of observations
+				prob <- num_times / NROW(DF) 
+				return(prob)
+}
+```
+
+```{r getStockBondProb2, include = TRUE, echo = FALSE}
+
+c(Daily = getStockBondProb(daily))
+c(Monthly = getStockBondProb(monthly))
+c(Annually = getStockBondProb(annually))
+
+```
