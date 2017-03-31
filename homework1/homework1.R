@@ -56,13 +56,13 @@ getStats <- function(DF){
 				return(list(stats = stats, shape = shape))
 }
 
-kable(getStats(daily)$stats, digits = 4)
+kable(getStats(daily)$stats, digits = 4, caption = "Daily")
 kable(t(getStats(daily)$shape), digits = 6)
 
-kable(getStats(monthly)$stats, digits = 4)
+kable(getStats(monthly)$stats, digits = 4, caption = "Monthly")
 kable(t(getStats(monthly)$shape), digits = 6)
 
-kable(getStats(annually)$stats, digits = 4)
+kable(getStats(annually)$stats, digits = 4, caption = "Annually")
 kable(t(getStats(annually)$shape), digits = 6)
 
 
@@ -94,9 +94,9 @@ getADVStats <- function(DF){
 
 }
 
-kable(getADVStats(daily), digits = 6)
-kable(getADVStats(monthly), digits = 6)
-kable(getADVStats(annually), digits = 6)
+kable(getADVStats(daily), digits = 6, caption = "Daily")
+kable(getADVStats(monthly), digits = 6, caption = "Monthly")
+kable(getADVStats(annually), digits = 6, caption = "Annually")
 
 
 getABSshortfall <- function(DF){
@@ -115,9 +115,9 @@ getABSshortfall <- function(DF){
 				return(out)
 }
 
-kable(getABSshortfall(daily), digits = 6)
-kable(getABSshortfall(monthly), digits = 6)
-kable(getABSshortfall(annually), digits = 6)
+kable(getABSshortfall(daily), digits = 6, caption = "Daily")
+kable(getABSshortfall(monthly), digits = 6, caption = "Monthly")
+kable(getABSshortfall(annually), digits = 6, caption = "Annually")
 
 getStockBondProb <- function(DF){
 				stock <- DF$SP500_rtrn
@@ -129,7 +129,6 @@ getStockBondProb <- function(DF){
 				return(prob)
 }
 
-getStockBondProb(daily)
-getStockBondProb(monthly)
-getStockBondProb(annually)
-
+c(Daily = getStockBondProb(daily))
+c(Monthly = getStockBondProb(monthly))
+c(Annually = getStockBondProb(annually))
