@@ -40,13 +40,17 @@ getStats <- function(DF){
 
 				stats <- data.frame(
 
-							stock = c(	mean = mean(stock), var = var(stock), 
-										sd = sd(stock), skew = skewness(stock), 
+							stock = c(	mean = mean(stock), 
+										var = var(stock), 
+										sd = sd(stock), 
+										skew = skewness(stock), 
 										kurt = kurtosis(stock)
 									),
 
-							bond  = c(	mean = mean(bond), var = var(bond), 
-										sd = sd(bond), skew = skewness(bond), 
+							bond  = c(	mean = mean(bond), 
+										var = var(bond), 
+										sd = sd(bond), 
+										skew = skewness(bond), 
 										kurt = kurtosis(bond)
 									)
 
