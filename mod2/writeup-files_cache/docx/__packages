@@ -1,0 +1,14 @@
+base
+methods
+datasets
+utils
+grDevices
+graphics
+stats
+zoo
+xts
+e1071
+ggplot2
+knitr
+gridExtra
+reshape2

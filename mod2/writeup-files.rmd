@@ -1,3 +1,16 @@
+---
+title: "Untitled"
+author: "Homework 2"
+date: "April 6, 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r cars, cache = TRUE, fig.height=4.5, fig.width=8.5, fig.align='center'}
 ##############
 # Homework 2 #
 ##############
@@ -284,7 +297,7 @@ Z <- sqrt(T) * (rf_mu - b_mu) / sqrt(b_sigma2)
 # Generally, as the length of the time horizon grows(T), 
 # the probability that the risk free asset will outperform the risky asset decreases; that is, the probability goes to zero.
 # However, here rf_mu = b_mu, thus the result is indepedent of the time horizon.
-# And Again for volatility, because rf_mu = b_mu,  the numeritor becomes 0, cancels out the numeriator, and makes the operation indepedent of the time horizon 
+# Again, as for volatility, rf_mu = b_mu, and is equal to 0, so the numeritor becomes 0, making the result indepedent of variance
 
 # Question 3
 # TO DO
@@ -306,3 +319,5 @@ Z <- sqrt(T) * (rf_mu - b_mu) / sqrt(b_sigma2)
 # I believe that managers should use it as one metric, or one tool in their tool box to get a snapshot of their risk exposure. Releing soley on the metric
 # is folly; and one, instead, should use a dashboard of risk assessment tools.
 
+
+```
