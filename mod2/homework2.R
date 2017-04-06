@@ -10,7 +10,9 @@ options("width" = 250)
 options(scipen  = 999)
 options(digits  = 003)
 
-library(xts); library(zoo); library(e1071); library(ggplot2); library(knitr); library(gridExtra)
+library(xts); library(zoo); library(e1071); 
+library(ggplot2); library(knitr); library(gridExtra)
+library(reshape2)
 
 set.seed(666) # the devils seed
 
@@ -59,7 +61,7 @@ makeAbsShortfall <- function(returns, title, sim_obs = 10000){
 	pvalues <- pnorm(rtrn_zscore, mean = mean(returns), sd = sd(returns))
 
 	# Draw from standard normal; compute Prob(z < Z) via pnorm
-	simulation <- rnorm(sim_obs, mean = mean(simulation), sd = sd(simulation))
+	simulation <- rnorm(sim_obs) # draw from standard normal
 	sim_zscore <- makeZScore(simulation)
 	pvalues_sim <- pnorm(sim_zscore, mean = mean(simulation), sd = sd(simulation))
 	
@@ -111,27 +113,147 @@ kable(bond_monthly_answer$detail, digits = 6, caption = "Monthly")
 bond_annually_answer <- makeAbsShortfall(annually$BOND_rtrn, title = "Annual Shortfall (Bonds)")
 kable(stock_annually_answer$detail, digits = 6, caption = "Annually")
 
-# Question 3, 4, and 5
+# Question 3
+probReturn <- function(R, K = 1.20, T = 5){ # remeber to add 1 to K because of cum return
+	R <- matrix(R)
+	r <- log(1 + R) # turn return series into cum return
+	mu <- mean(r)
+	sigma2 <- var(r)
 
-K <- 0.20
-T <- 5
-R <- matrix(anuually$SP500_rtrn) 
-r <- log(1 + R)
-mu <- mean(r)
-sigma2 <- var(r)
-ElnVT <- T * mu
-VarlnVT <- T * sigma2
+	# Prob Vt < K
+	1 - pnorm(log(K), mean = mu * T, sd = sqrt(sigma2) * sqrt(T))
 
+	# formulaic approach; Prob(z < ln(K) - Tu / sqrt(T) *(sigma))
+	Z <- (log(K) - T * mu) / (sqrt(T) * sqrt(sigma2))
+	out <- as.numeric(1 - pnorm(Z))
+	return(out)
+}
 
-q <- (log(K) - T * mu) / (sqrt(T) * sqrt(sigma2))
-pnorm(q)
-pnorm(log(K), mean = mu * T, sd = sqrt(sigma2) * sqrt(T))
+makeTable <- function(parent_function){
 
+	out <- cbind.data.frame(
+			stocks = rbind(
+				eval(parent_function(R = annually$SP500_rtrn)),
+				eval(parent_function(R = monthly$SP500_rtrn)),
+				eval(parent_function(R = daily$SP500_rtrn))
+				),
 
+			bonds = rbind(
+				eval(parent_function(R = annually$BOND_rtrn)),
+				eval(parent_function(R = monthly$BOND_rtrn)),
+				eval(parent_function(R = daily$BOND_rtrn))),
+			row.names = c("Annually", "Monthly", "Daily")
+	)
 
+	out <- kable(out, digits = 6)
+	return(out)
+}
 
-pnorm(log(K), mean = mu * T, sd = sqrt(sigma2) * sqrt(T))
+makeTable(probReturn)
 
-log(K)
+# Question 4
+simKnownDist <- function(R, K = 1.20, T = 5, sim_obs = 10000){
 
-# 1 - pnorm(q = (0.05 - mean(annually$SP500_rtrn)) / sd(annually$SP500_rtrn), mean = 0, sd = 1, lower.tail = TRUE)
+	R_sims <- replicate(sim_obs, rnorm(T, mean = mean(R), sd = sd(R))) # sim_obs (n) draws from standard normal(given known params) for T periods
+	
+	Vt <- apply(R_sims, 2, function(x) prod(x + 1)) # prod return series; each simulation addes 1 (because of cum) then is n1 X n2 x n3 x nn
+	Vt_log <- apply(R_sims, 2, function(x) exp(sum(log(x + 1)))) # from log'ed return series; now logged so it is the sum
+	stopifnot(all.equal(Vt, Vt_log))
+
+	prob_Vt_greater_than_K <- length(which(Vt_log > K)) / sim_obs # objective; since question asks for log_normal
+	return(prob_Vt_greater_than_K)
+}
+
+makeTable(simKnownDist)
+
+# Question 5
+simBootstrap <- function(R, K = 1.20, T = 5, sim_obs = 10000){
+
+	R_sims <- replicate(sim_obs, sample(R, T), simplify = FALSE) # sim_obs (n) draws from data(bootstrap, given that returns are i.i.d) for T periods
+	
+	Vt <- lapply(R_sims, function(x) prod(x + 1)) # prod return series; each simulation addes 1 (because of cum) then is n1 X n2 x n3 x nn
+	Vt_log <- lapply(R_sims, function(x) exp(sum(log(x + 1)))) # from log'ed return series; now logged so it is the sum
+	stopifnot(all.equal(Vt, Vt_log))
+
+	prob_Vt_greater_than_K <- length(which(Vt_log > K)) / sim_obs # objective; since question asks for log_normal
+	return(prob_Vt_greater_than_K)
+}
+
+makeTable(simBootstrap)
+
+# Question 6
+stock.VS.bonds.Analytical <- function(Ra, Rb, T = 30, sim_obs = 10000){
+
+	Ra <- matrix(Ra)
+	ra <- log(1 + Ra) # turn return series into cum return
+	mu_a <- mean(ra)
+	sigma2_a <- var(ra)
+
+	Rb <- matrix(Rb)
+	rb <- log(1 + Rb)
+	mu_b <- mean(rb)
+	sigma2_b <- var(rb)
+
+	rho <- cor(Ra, Rb) # rho
+
+	E_delta <- T * (mu_a - mu_b)
+	# sigma2_delta <- T * (sigma2_a + sigma2_b - (2 * rho * sqrt(sigma2_a) * sqrt(sigma2_b)))
+	sigma2_delta <- T * (sigma2_a - sigma2_b)
+
+	# second line uses the constant c
+	Z <- -E_delta / sqrt(sigma2_delta)
+	# Z_check <- -sqrt(T) * (mu_a - mu_b) / sqrt(sigma2_a + sigma2_b - (2 * rho * sqrt(sigma2_a) * sqrt(sigma2_b)))
+
+	# Prob(z < Z)
+	out <- pnorm(Z)
+	return(out)
+}
+
+makeTable2 <- function(parent_function, ...){
+	
+	out <- rbind.data.frame(
+				eval(parent_function(
+					Ra = daily$SP500_rtrn, 
+					Rb = daily$BOND_rtrn,
+					... = ...
+				)),
+				eval(parent_function(
+					Ra = monthly$SP500_rtrn, 
+					Rb = monthly$BOND_rtrn,
+					... = ...
+				)),
+				eval(parent_function(
+					Ra = annually$SP500_rtrn, 
+					Rb = annually$BOND_rtrn, 
+					... = ...
+				))
+			)
+	colnames(out) <- paste("T = ", ..., sep = "")
+	rownames(out) <- c("Daily", "Monthly", "Annually")
+	out <- kable(out, digits = 6)
+	return(out)
+}
+
+makeTable2(stock.VS.bonds.Analytical, T = 5)
+makeTable2(stock.VS.bonds.Analytical, T = 30)
+makeTable2(stock.VS.bonds.Analytical, T = 100)
+
+# Question 7
+stock.VS.bonds.Bootstrap <- function(Ra, Rb, T = 30, sim_obs = 10000){
+
+	sample_indices <- replicate(sim_obs, sample(index(Ra), T), simplify = FALSE) # sim_obs (n) draws from data(bootstrap, given that returns are i.i.d) for T periods
+	
+	sim_samples <- lapply(sample_indices, function(x) cbind(Ra[x], Rb[x])) # get the difference in returns across sim_obs (n) observations
+	sim_cumreturns <- lapply(sim_samples, function(x) c(prod(x$SP500_rtrn + 1), prod(x$BOND_rtrn + 1))) # now get the cum return across all universies
+
+	prob_Vs_greater_than_Vb <- length(which(unlist(lapply(sim_cumreturns, function(x) x[1] < x[2])))) / sim_obs # 
+	return(prob_Vs_greater_than_Vb)
+}
+
+out <- cbind(
+	stock.VS.bonds.Bootstrap(Ra = daily$SP500_rtrn, Rb = daily$BOND_rtrn),
+	stock.VS.bonds.Bootstrap(Ra = monthly$SP500_rtrn, Rb = monthly$BOND_rtrn),
+	stock.VS.bonds.Bootstrap(Ra = annually$SP500_rtrn, Rb = annually$BOND_rtrn))
+
+rownames(out) <- "T = 30"
+kable(t(rbind(c("Daily", "Monthly", "Annually"), out)),  digits = 6)
