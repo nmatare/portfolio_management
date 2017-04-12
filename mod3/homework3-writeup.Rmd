@@ -338,17 +338,17 @@ And the cost of insurance increases with T.
 
 In regards to the probability of underperformance when T = 10
 
-1 - Prob(z < $\frac{0.10 - 0.04}{\sqrt{0.03^2} + \frac{0.20^2}{10}}$)
+1 - Prob(z < $\frac{0.10 - 0.04}{\sqrt{0.03^2 + \frac{0.20^2}{10}}}$)
 
 = 0.196
 
 Likewise, the probability of underperformance when T = 20
 
-1 - Prob(z < $\frac{0.10 - 0.04}{\sqrt{0.03^2} + \frac{0.20^2}{20}}$)
+1 - Prob(z < $\frac{0.10 - 0.04}{\sqrt{0.03^2 + \frac{0.20^2}{20}}}$)
 
 = 0.133
 
-Natuarlly, the greater uncertainty increased the probability of underperformance. However, the effect of $\mu$ on the cost of shortfall insurance is zero. That is, the value of the option does not depend on $\mu$, so there is no change when T is either 10 or 20.
+Naturally, the greater uncertainty increased the probability of underperformance. However, the effect of $\mu$ on the cost of shortfall insurance is zero. That is, the value of the option does not depend on $\mu$, so there is no change when T is either 10 or 20.
 
 # C.3.
 
