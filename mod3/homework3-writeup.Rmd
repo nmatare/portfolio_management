@@ -1,0 +1,259 @@
+---
+title: "Portfolio Managment: Homework 3"
+author: "Gal Skarishevsky, Nathan Matare, Brian Thompson, Lior Sahaf"
+date: "April 11, 2017"
+output: pdf_document
+urlcolor: blue
+graphics: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NA, message = FALSE,
+                      fig.width = 6, fig.height = 4.5, fig.align = "right")
+```
+
+# A.1. Questions on Treasury Inflation-Protected Securities (TIPS).
+
+## a) 
+
+Regular bonds pay a fixed coupon throughout their life and return their pre-established face value at maturity.  TIPS adjust to inflation – the principal value is pinned to the CPI, and coupon amounts are calculated based on their pre-established interest rate and the adjusted principal value.
+
+## b)
+
+If we expect inflation to rise we can short treasuries and use the proceeds to purchase TIPS, profiting on the difference between the treasury rate and the TIPS rate on the inflation-adjusted principal amount.
+
+# A.2. Questions on HMC’s portfolio.
+
+## a)
+
+## b)
+
+\newpage
+
+```{r Load Config, include = FALSE, echo = FALSE, results = 'hide'}
+
+options("width" = 250)
+options(scipen  = 999)
+options(digits  = 003)
+
+library(xts); library(zoo); library(e1071); 
+library(ggplot2); library(knitr); library(gridExtra)
+library(reshape2); library(foreach); library(doMC)
+
+set.seed(666) # the devils seed
+
+username 	<- Sys.info()[["user"]]
+dir 		<- paste("/home/", username, "/Documents/Education/Chicago_Booth/Classes/35120_Portfolio_Management/portfolio_management/mod3", sep = ""); setwd(dir)
+
+tbills <- read.csv("TB_26_16.csv", header = FALSE)
+stocks <- read.csv("VWMKT_26_16.csv", header = FALSE)
+data <- cbind(tbills, stocks[ ,-1])
+
+data <- as.xts(data[ ,-1], order.by = as.Date(as.character(data[,1]), format = "%Y%m%d"))
+colnames(data) <- c("tbills", "stocks")
+
+```
+
+# B.1. Relative performance of stocks and T-bills.
+
+## a)
+
+Considering that an unskilled investor could choose a stock only strategy and be 'correct' (that is, select the higher return) 68.1% of the time, Claire's "skill" is unconvincing. Claire is 8% less skilled than an investor who simply chooses a stock only strategy. 
+
+```{r 1a, include = TRUE, echo = TRUE}
+length(which(data$stocks > data$tbills)) / NROW(data) * 100
+```
+
+## b)
+
+```{r 1b, include = TRUE, echo = TRUE}
+cumreturn <- (data + 1)
+kable(t(apply(cumreturn, 2, prod)), digits = 6) # in dollars
+```
+
+# B.2. Perfect vs. random market timing.
+
+## a)
+
+Naturally, the omniscient strategy performs better as it selects the highest return for each given year.
+
+```{r 2a, include = TRUE, echo = FALSE}
+perfect <- as.matrix(apply(data, 1, max))
+perfect_cumreturn <- (perfect + 1)
+#prod(perfect_cumreturn)
+
+#mean(perfect) # mean return of perfect timing
+#mean(perfect - data$tbills) / sd(perfect - data$tbills) # sharpe ratio of perfect
+
+#mean(data$stocks) # mean return of market
+#mean(data$stocks - data$tbills)/sd(data$stocks - data$tbills) # sharpe ratio of market
+
+out <- data.frame(
+		cumreturn_perfect = prod(perfect_cumreturn), 
+		mean_perfect = mean(perfect), 
+		sr_perfect = mean(perfect - data$tbills) / sd(perfect - data$tbills),
+		mean_market = mean(data$stocks),
+		sr_market = mean(data$stocks - data$tbills)/sd(data$stocks - data$tbills)
+	)
+
+kable(out, digits = 6) # in dollars
+```
+
+## b)
+
+We write the function '\texttt{randomTiming}' that randomly selects between the treasury bill and market.
+
+```{r 2b_1, include = TRUE, echo = TRUE}
+
+randomTiming <- function() as.matrix(apply(data, 1, function(x) sample(x, 1)))
+# run 1000 simulations of random timing
+simulations <- replicate(1000, randomTiming(), simplify = FALSE) 
+	
+sim_means <- unlist(lapply(simulations, mean))
+sim_sharperatios <- unlist(lapply(simulations, 
+                           function(x) mean(x - data$tbills) / sd(x - data$tbills)))
+
+```
+
+The expected return of Claire's random strategy is 7.62%. The average return of the stock only portfolio is shown in red.
+
+```{r 2b1, include = TRUE, echo = FALSE}
+mean(sim_means) # expected return of Claire's random strategy
+ggplot(data = data.frame(means = sim_means)) +
+	geom_histogram(aes(means), fill = "darkgrey", alpha = 0.5) + 
+	geom_vline(xintercept = mean(data$stocks), color = "red", linetype = 'dashed') +
+	labs(title = "Average Returns")
+```
+
+The expected Sharpe Ratio of Claire's random strategy is 0.28. The Sharpe Ratio of the stock only portfolio is shown in blue.
+
+```{r 2b2, include = TRUE, echo = FALSE}
+mean(sim_sharperatios) # expected sharpe ratio of Claire's random strategy
+ggplot(data = data.frame(means = sim_sharperatios)) +
+	geom_histogram(aes(sim_sharperatios), fill = "darkgrey", alpha = 0.5) + 
+	geom_vline(xintercept = mean(data$stocks - data$tbills)/sd(data$stocks - data$tbills), color = "blue", linetype = 'dashed') +
+	labs(title = "Average Sharpe Ratios")
+
+
+```
+
+
+# B.3. Benefits of imperfect market timing.
+
+## a) 
+
+We write the function '\texttt{skillTiming}' that selects the 'correct' secruity 60% of the time.
+
+```{r 3b_1, include = TRUE, echo = TRUE}
+
+skillTiming <- function() as.matrix(apply(data, 1, 
+               function(x) sample(c(max(x), min(x)), 
+                                  prob = c(0.60, 0.40), 1))) 
+              # get the 'correct', aka max 60% of time
+simulations <- replicate(1000, skillTiming(), simplify = FALSE) 
+# run 1000 simulations of random timing
+
+sim_means <- unlist(lapply(simulations, mean))
+sim_sharperatios <- unlist(lapply(simulations, 
+                           function(x) mean(x - data$tbills) / sd(x - data$tbills)))
+
+```
+
+Claire's skill strategy yields an average return of 9.35%. Naturally, the skill strategy improves upon the random strategy but is still inferior to the market only portfolio. 
+
+```{r 3b1, include = TRUE, echo = FALSE}
+mean(sim_means) # expected return of Claire's skill strategy
+ggplot(data = data.frame(means = sim_means)) +
+	geom_histogram(aes(means), fill = "darkgrey", alpha = 0.5) + 
+	geom_vline(xintercept = mean(data$stocks), color = "red", linetype = 'dashed') +
+	labs(title = "Average Returns")
+
+```
+
+Equally, the 60% skill strategy yields an improved average Sharpe Ratio of 0.394.
+
+```{r 3b2, include = TRUE, echo = FALSE, fig.height=4.5, fig.width=8.5, fig.align='center'}
+mean(sim_sharperatios) # expected sharpe ratio of Claire's skill strategy
+ggplot(data = data.frame(means = sim_sharperatios)) +
+	geom_histogram(aes(sim_sharperatios), fill = "darkgrey", alpha = 0.5) + 
+	geom_vline(xintercept = mean(data$stocks - data$tbills)/sd(data$stocks - data$tbills), color = "blue", linetype = 'dashed') +
+	labs(title = "Average Sharpe Ratios")
+```
+
+## b) 
+
+With 2% fees, Claire's skill strategy yields a 7.35% average return and 0.261 Sharpe Ratio. As this is no better than randomly selecting between stocks and treasury bills, and worse yet than selecting a market only portfolio, we would not hire Claire based upon this fee arrangement. 
+
+```{r 3b3, include = TRUE, echo = FALSE}
+# expected return on Claire's skill strategy minus fees
+mean(sim_means - 0.02) 
+sim_sharperatios_fees <- unlist(lapply(simulations, 
+                          function(x) mean(x - data$tbills - 0.02) / sd(x - data$tbills)))
+# expected sharpe ratio of Claire's strategy with fees
+mean(sim_sharperatios_fees)
+
+```
+
+# B.4. Imperfect market timing with different forecasting accuracies.
+
+We write the function '\texttt{skillTimingn}' that selects the 'correct' secruity n percent of the time. Next, we simulate 1000 trails at an accuracy of [0.50 - 1.00], and parallize the operation over multiple cores.
+
+```{r 4, include = TRUE, echo = TRUE, cache = TRUE}
+
+ns <- rep(50:100) / 100
+skillTiming_n <- function(n) as.matrix(apply(data, 1, 
+                 function(x) sample(c(max(x), min(x)), prob = c(n, 1 - n), 1))) 
+# all(skillTiming_n(1.00) == perfect) # sanity check
+
+registerDoMC(detectCores() - 1) 
+simulations <- foreach(i = ns) %dopar% { 
+  replicate(1000, skillTiming_n(i), simplify = FALSE) 
+  } # for each n, run a simulation
+
+sim_means_ns <- unlist(lapply(simulations, 
+                      function(x) mean(unlist(lapply(x, mean)))))
+sim_sharperatios <- unlist(lapply(simulations, 
+                      function(y) mean(unlist(lapply(y, 
+                      function(x) mean(x - data$tbills) / sd(x - data$tbills))))))
+frame <- cbind.data.frame(ns, sim_means_ns, sim_sharperatios)
+
+```
+
+We plot the two cases: one without fees, and one with 2% management fees. To beat the stock-only strategy’s expected return (11.68%), Claire requires a minimum accuracy of 73%.  To exceed the market’s Sharpe ratio (0.4054) requires an accuracy level of 61%. To beat the stock-only strategy’s expected return (11.68%), Claire requires a minimum accuracy of 84%.  To exceed the market’s Sharpe ratio (0.4054) requires an accuracy level of 72%.
+
+```{r 4graphs, include = TRUE, echo = FALSE, fig.height=4.5, fig.width=8.5, fig.align='center'}
+# No Fee
+frame$ns[which(frame$sim_means_ns > mean(data$stocks))][1] # minimum level of accuracy
+ggplot(data = frame) +
+	geom_line(aes(x = ns, y = sim_means_ns)) +
+	geom_hline(yintercept = mean(data$stocks), color = "red", linetype = 'dashed') +
+	labs(title = "Accuracy vs Expected Return (no fee)", x = "Accuracy", y = "Expected Return")
+
+frame$ns[which(frame$sim_sharperatios > mean(data$stocks - data$tbills)/sd(data$stocks - data$tbills))][1] # minimum level of accuracy
+
+ggplot(data = frame) +
+	geom_line(aes(x = ns, y = sim_sharperatios)) +
+	geom_hline(yintercept = mean(data$stocks - data$tbills)/sd(data$stocks - data$tbills), color = "blue", linetype = 'dashed') +
+	labs(title = "Accuracy vs Sharpe Ratios(no fee)", x = "Accuracy", y = "Sharpe Ratio")
+
+# With Fee
+sim_means_ns <- unlist(lapply(simulations, function(x) mean(unlist(lapply(x, function(y) y - 0.02)))))
+sim_sharperatios <- unlist(lapply(simulations, function(y) mean(unlist(lapply(y, function(x) mean(x - data$tbills - 0.02) / sd(x - data$tbills))))))
+frame2 <- cbind.data.frame(ns, sim_means_ns, sim_sharperatios)
+frame2$ns[which(frame2$sim_means_ns > mean(data$stocks))][1] # minimum level of accuracy
+
+ggplot(data = frame2) +
+	geom_line(aes(x = ns, y = sim_means_ns)) +
+	geom_hline(yintercept = mean(data$stocks), color = "red", linetype = 'dashed') +
+	labs(title = "Accuracy vs Expected Return (Fee)", x = "Accuracy", y = "Expected Return")
+
+frame2$ns[which(frame2$sim_sharperatios > mean(data$stocks - data$tbills)/sd(data$stocks - data$tbills))][1] # minimum level of accuracy
+
+ggplot(data = frame2) +
+	geom_line(aes(x = ns, y = sim_sharperatios)) +
+	geom_hline(yintercept = mean(data$stocks - data$tbills)/sd(data$stocks - data$tbills), color = "blue", linetype = 'dashed') +
+	labs(title = "Accuracy vs Sharpe Ratios (Fee)", x = "Accuracy", y = "Sharpe Ratio")
+
+```
+
+

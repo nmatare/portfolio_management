@@ -1,0 +1,11 @@
+base
+zoo
+xts
+e1071
+ggplot2
+knitr
+gridExtra
+reshape2
+foreach
+iterators
+doMC

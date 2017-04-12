@@ -47,6 +47,16 @@ mean(perfect - data$tbills) / sd(perfect - data$tbills) # sharpe ratio of perfec
 mean(data$stocks) # mean return of market
 mean(data$stocks - data$tbills)/sd(data$stocks - data$tbills) # sharpe ratio of market
 
+out <- data.frame(
+		cumreturn_perfect = prod(perfect_cumreturn), 
+		mean_perfect = mean(perfect), 
+		sr_perfect = mean(perfect - data$tbills) / sd(perfect - data$tbills),
+		mean_market = mean(data$stocks),
+		sr_market = mean(data$stocks - data$tbills)/sd(data$stocks - data$tbills)
+	)
+
+kable(out, digits = 6) # in dollars
+
 # b)
 randomTiming <- function() as.matrix(apply(data, 1, function(x) sample(x, 1)))
 simulations <- replicate(1000, randomTiming(), simplify = FALSE) # run 1000 simulations of random timing
