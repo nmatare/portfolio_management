@@ -147,3 +147,19 @@ ggplot(data = frame2) +
 	labs(title = "Accuracy vs Sharpe Ratios (Fee)", x = "Accuracy", y = "Sharpe Ratio")
 
 frame2$ns[which(frame2$sim_sharperatios > mean(data$stocks - data$tbills)/sd(data$stocks - data$tbills))][1] # minimum level of accuracy
+
+# C. EXAM-LIKE QUESTIONS.
+
+Rs1 =  0.05 # state 1 stock
+Rs2 = -0.02 # state 2 stock
+Rf  =  0.01 # all states of t-bill
+
+E_Rs = (Rs1 + Rs2) / 2 # expected return given equal prob
+O_Rs = ??
+
+# Passive
+E_p = 0.50 * E_Rs + 0.50 * Rf # expected return of passive
+O_p = 0.50 * O_Rs # expected sd of passive
+
+# Active
+
