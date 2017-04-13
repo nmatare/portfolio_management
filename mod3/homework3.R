@@ -155,11 +155,57 @@ Rs2 = -0.02 # state 2 stock
 Rf  =  0.01 # all states of t-bill
 
 E_Rs = (Rs1 + Rs2) / 2 # expected return given equal prob
-O_Rs = ??
+O_Rs = sqrt(var(c(Rs1, Rs2)) / 2) # standard deviation
 
 # Passive
 E_p = 0.50 * E_Rs + 0.50 * Rf # expected return of passive
 O_p = 0.50 * O_Rs # expected sd of passive
 
+0.50 * E_p + 0.50 * Rf / 
+
+var(E_p - Rf)
+
 # Active
 
+makePortfolio <- function(weight){
+				out <- data.frame(
+							Prob = c(0.25, 0.25, 0.25, 0.25),
+							Rs = c(0.05, 0.05, -0.02, -0.02),
+							Rc = c(0.01, 0.01, 0.01, 0.01),
+							Ws = c(weight, 1 - weight, weight, 1 - weight)
+							)
+				out$Ra <- out$Ws * out$Rs + (1 - out$Ws) * out$Rc
+				E_a = sum(out$Ra) * 0.25 # expected return from active
+				sigma = sqrt(sum((out$Ra - E_a) ^ 2) * 0.25) # variance
+				return(c(E_a, sigma))
+
+}
+makePortfolio(0.10)
+makePortfolio(0.70)
+
+out <- data.frame(
+			Prob = c(0.25, 0.25, 0.25, 0.25),
+			Rs = c(0.05, 0.05, -0.02, -0.02),
+			Rc = c(0.01, 0.01, 0.01, 0.01),
+			Ws = c(0.70, 0.30, 0.70, 0.30)
+			)
+out$Ra <- out$Ws * out$Rs + (1 - out$Ws) * out$Rc
+
+kable(out, digits = 6) # in dollars
+
+E_a = sum(out$Ra) * 0.25 # expected return from active
+sqrt(sum((out$Ra - E_a) ^ 2) * 0.25) # variance 
+
+out <- data.frame(
+			Prob = c(0.50, 0.50),
+			Rs = c(0.015, 0.015),
+			Rc = c(0.01, 0.01),
+			Ws = c(0.70, 0.30)
+			)
+out$Ra <- out$Ws * out$Rs + (1 - out$Ws) * out$Rc
+
+kable(out, digits = 6) # in dollars
+
+E_a = sum(out$Ra) * 0.50 # expected return from active
+
+sqrt(sum((out$Ra - E_a) ^ 2) * 0.50) # variance 

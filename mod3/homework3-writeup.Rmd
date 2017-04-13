@@ -20,13 +20,21 @@ Regular bonds pay a fixed coupon throughout their life and return their pre-esta
 
 ## b)
 
-If we expect inflation to rise we can short treasuries and use the proceeds to purchase TIPS, profiting on the difference between the treasury rate and the TIPS rate on the inflation-adjusted principal amount.
+If we expect inflation to rise we can short treasuries and use the proceeds to purchase TIPS, profiting on the difference between the treasury rate and the TIPS rate on the inflation-adjusted principal amount. That is, TIPS are adjusted for the level of inflation and thus the spread between normal Treasuries and TIPS should diverge based upon the expected level of inflation, as measured by CPI. 
 
 # A.2. Questions on HMC’s portfolio.
 
 ## a)
 
+HMC considered three return characteristics when developing their capital market assumptions: expected future real returns, volatility of real returns, and correlation between real returns from each asset class with real returns with all other asset classes. When placed into a mean-variance framework, the optimal allocation was determined by modern portfolio theory, mean-variance analysis, (return vs variance, given covariance).
+
+Naturally, HMC used twenty-year historical data to determine optimal weight allocation. To the extent to which they didn’t have data (in the case of TIPS), they used as much historical data as was currently available. 
+
+Traditionally, HMC viewed the U.S. equity premium favorably, allocating 32% of their portfolio into U.S. equities. However, based upon expected future returns, variances, and covariances, HMC anticipated that the U.S. equity premium to be less profitable (in terms of its risk/return/covariance structure) in the future. As such, the firm reduced its U.S. equity exposure by 10% in its new TIPS incorporated portfolio. 
+
 ## b)
+
+Following the adage, “Worldly wisdom teachers that it is better for reputation to fail conventionally then to succeed unconventionally.”, we recommend that Jack Meyer move forward with his recommended strategy of a new position of 7% TIPS. Although a greater Sharpe Ratio (0.38 vs 0.32) could be achieved with a much larger (50%+) TIPS portfolio allocation, several reasons prohibit us from recommending so: As of the case, no other university has allocated as great of portfolio weights onto TIPS as HMCs candidate portfolios, and, given the relatively small amount of historical TIPS data, such large exposure to the asset class could place HMC at tremendous risk should historical assumptions about the asset covariance structure fail to extrapolate into the future.
 
 \newpage
 
@@ -279,10 +287,10 @@ $E_{A}$ = 0.25(0.038 + 0.022 - 0.011 + 0.001) = 1.25%
 
 $\sigma_{A}$ = $\sqrt{0.25[(0.038 - 0.0125)^{2} + (0.022 - 0.0125)^{2} + (-0.011 - 0.0125)^{2} + (0.001 - 0.0125)^{2}]^{2}}$ = 1.89%
 
+$S_{a}$ = $\frac{(1.25 - 1)}{1.8875}$ = 0.1325
+
 
 ## b)
-
--- WRONG --
 
 In english, stocks return -2% or 5% with equal probability, so on expectation our portfolio yields 1.5% with a standard deviation of 3.5%.
 
@@ -290,19 +298,17 @@ $E_{s}$ = $\mathbb{E}$[$R_{s}$] = 0.50(-0.02) + 0.50(0.05) = 1.5%
 
 $\sigma_{s}$ = Std($R_{s}$) = $\sqrt{[(0.05 - 0.015)^2 + (-0.02 - 0.015)^2]/2}$ = 3.5%
 
-Our goal is to construct a portfolio with a standard deviation equal to 1.89%. Thus, we find the optimal weights such that variance of our goal portfolio is satisfied.
+Our goal is to construct a portfolio with a standard deviation equal to 1.89%. Thus, we find the optimal weights such that standard deviation is satisfied.
 
 $\sigma_{P}$ = Std($R_{P}$) =  w(0.035) + 1-w(0) = 0.0189
 
 w = 0.54
 
-Instead of trying to time the market, we construct a passive portfolio with constant weights:
+$E_{P}$ = $\mathbb{E}$($R_{P}$) = 0.54(0.015) + (1 - 0.54)(0.01) = 1.26%
 
-$E_{P}$ = $\mathbb{E}$($R_{P}$) = 0.70(0.015) + 0.30(0.01) = 1.35%
+$S_{a}$ = $\frac{(1.2697 - 1)}{1.8875}$ = 0.1429
 
-$\sigma_{P}$ = Std($R_{P}$) = 0.50(0.035) + 0.50(0)
-
-We hold a 70/30 stock/cash mix, thus we expect to yield a 1.35% return while maintaining 
+Indeed, we realize a higher expected return and Sharpe Ratio while maintaining a comparable standard deviation.
 
 \newpage
 # C.2.
