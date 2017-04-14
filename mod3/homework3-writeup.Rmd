@@ -34,7 +34,9 @@ Traditionally, HMC viewed the U.S. equity premium favorably, allocating 32% of t
 
 ## b)
 
-Following the adage, “Worldly wisdom teachers that it is better for reputation to fail conventionally then to succeed unconventionally.”, we recommend that Jack Meyer move forward with his recommended strategy of a new position of 7% TIPS. Although a greater Sharpe Ratio (0.38 vs 0.32) could be achieved with a much larger (50%+) TIPS portfolio allocation, several reasons prohibit us from recommending so: As of the case, no other university has allocated as great of portfolio weights onto TIPS as HMCs candidate portfolios, and, given the relatively small amount of historical TIPS data, such large exposure to the asset class could place HMC at tremendous risk should historical assumptions about the asset covariance structure fail to extrapolate into the future.
+Although HMC’s rationale for allocating funds to TIPS seemed sound we decided to run our own mean variance optimization analysis. We copied the data tables to excel and computed a portfolio that keeps all asset classes inside industry lows and highs range (as provided by exhibit 7) and minimizes the standard deviation for a return similar to what HMC’s management is offering: 6.44%. We were able to construct a portfolio which has a lower standard deviation of 8.5% and which yields the same return of %6.44. Those generate a Sharpe ratio of 0.76. For returns and correlations, we used the assumed values presented in the case. See the Figure 1 on next page.
+
+![Custom Portfolio](/home/johnconnor/Documents/Education/Chicago_Booth/Classes/35120_Portfolio_Management/portfolio_management/mod3/liorpic.png)
 
 \newpage
 
