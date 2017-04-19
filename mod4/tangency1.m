@@ -2,10 +2,10 @@ clear all
 clc
 
 N = 30;                     % number of assets
-T = 120;                     % number of months
-rho = 0.8;                  % return correlation across assets
+T = 120000;                     % number of months
+rho = 0.6;                  % return correlation across assets
 e = 0.01;                   % expected excess returns, monthly
-sigma = 0.05;               % standard deviation of returns, monthly
+sigma = 0.01;               % standard deviation of returns, monthly
 
 % Construct true E and V
 E = e*ones(N,1);

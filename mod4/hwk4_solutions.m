@@ -9,6 +9,9 @@ r = x(:,2:end);
 re = r - rf*ones(1,5);
 ER1 = mean(re)';      
 ER11 = round(ER1*100)/100;
+
+
+
 ER2 = [0.6; 0.7; 1.2; 0.9; 1.2]*0.005;
 ER3 = 0.5*ER1+0.5*ER2;
 V1 = cov(r);    
@@ -25,6 +28,8 @@ E_1 = w1'*ER1;
 E_0 = w0'*ER1;
 V_1 = w1'*V1*w1;
 V_0 = w0'*V1*w0;
+
+
 m = floor(dte/100) - floor(floor(dte/100)/100)*100;
 f1 = find(m==1);
 f1 = f1(f1>=find(dte==19780131));
