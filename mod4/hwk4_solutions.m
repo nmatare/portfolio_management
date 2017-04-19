@@ -17,7 +17,7 @@ ER3 = 0.5*ER1+0.5*ER2;
 V1 = cov(r);    
 avgsig2 = mean(diag(V1));
 V3 = 0.5*V1+0.5*avgsig2*eye(size(V1));
-w0 = (inv(V1)*ones(5,1))/(ones(1,5)*inv(V1)*ones(5,1));
+w0 = (inv(V1)*ones(5,1))/(ones(1,5)*inv(V1)*ones(5,1)); %identity matrix?
 w1 = (inv(V1)*ER1)/sum(inv(V1)*ER1);    
 w2 = (inv(V1)*ER2)/sum(inv(V1)*ER2);
 w3 = ER1/sum(ER1);
@@ -26,6 +26,7 @@ w11 = (inv(V1)*ER11)/sum(inv(V1)*ER11);
 w31 = ER11/sum(ER11);
 E_1 = w1'*ER1;
 E_0 = w0'*ER1;
+
 V_1 = w1'*V1*w1;
 V_0 = w0'*V1*w0;
 

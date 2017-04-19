@@ -19,6 +19,7 @@ set.seed(666) # the devils seed
 username 	<- Sys.info()[["user"]]
 dir 		<- paste("/home/", username, "/Documents/Education/Chicago_Booth/Classes/35120_Portfolio_Management/portfolio_management/mod4", sep = ""); setwd(dir)
 
+# Data Preperation
 tbills <- read.csv("TB_7301_1612.csv", header = TRUE, stringsAsFactors = FALSE)
 stocks <- read.csv("STOCK_RETS.csv", header = TRUE, stringsAsFactors = FALSE)[ ,-1]
 
@@ -37,43 +38,11 @@ data <- as.xts(
 		)
 colnames(data) <- c("tbills", "XOM","PG", "PFE", "INTC", "WMT")
 
-# 1. Estimating E and V by the sample estimates.
-
-E = coredata(data)[ ,-1]
-V = 
-
-
-N = 30;                   #  % number of assets
-T = 1200;               #      % number of months
-rho = 0.6;                #  % return correlation across assets
-e = 0.01;                 #  % expected excess returns, monthly
-sigma = 0.01;             # % standard deviation of returns, monthly
-
-E = rep(e, N) # true expected return
-V = sigma ^ 2 * (diag(N) + matrix(rho, N, N) - diag(N) * rho) # identity matrix
-
-R = e + replicate(N, rnorm(T)) %*% chol(V) # say returns are from normal dist given correlation
-Ehat = apply(R, 2, mean) # get expected mean of asset
-Vhat = cov(R) # estimated correlation
-
-# tangency portfolio weights
-true_weight = solve(V, E) / (E %*% solve(V, E) * 100) # slide 9: wMVP = (V^-1)i / i`(V^-1)i'
-estimate_weight = solve(Vhat, Ehat) / (Ehat %*% solve(Vhat, Ehat) * 100)
-
-solve(Vhat, Ehat) / (Ehat %*% solve(Vhat, Ehat) * 100)
-
-# minimum variance portfolio weights
-
-i = rep(1, N) # necessary column of ones for MVP
-wMVP = solve(V, i) / (i %*% solve(V, i))
-
-(inv(V) * ones(2, 1)) / (ones(1,2) * inv(V) * ones(2, 1)) #mvp
-
-getPortfolio <- function(data, portfolio, round_returns = FALSE, CAPM = FALSE, 
-						 BAYES_lay = FALSE, BAYES_real = FALSE){
+# Analysis
+getPortfolio <- function(data, portfolio, round_returns = FALSE, identity = FALSE, CAPM = FALSE, BAYES = FALSE){
 
 	rfree  = data$tbills # risk free returns
-	rtrns  = data[,-grep("tbills", colnames(data))] # expected returns
+	rtrns  = data[ ,-grep("tbills", colnames(data))] # expected returns
 	ertrns = apply(rtrns, 2, function(x) as.vector(x) - as.vector(rfree)) # rtrns - rfree
 
 	N = NCOL(ertrns) # number of assets
@@ -82,35 +51,71 @@ getPortfolio <- function(data, portfolio, round_returns = FALSE, CAPM = FALSE,
 	Vhat = cov(rtrns) # covariance of expected returns
 	Ehat = apply(ertrns, 2, mean) # expectation of returns
 
-	# identify matrix ??
-	# avgsig2 = mean(diag(V1));
-	# V3 = 0.5*V1+0.5*avgsig2*   eye(size(V1));
+	if(round_returns) 
+		Ehat = round(Ehat, 2) # round to 2 decimal places	
 
-	# rho = mean(diag(Vhat))
-	# Vidn = sigma ^ 2 * (diag(N) + matrix(rho, N, N) - diag(N) * rho) # identity matrix
+	if(CAPM) 
+		Ehat = c(0.6, 0.7, 1.2, 0.9, 1.2) * 0.005 # estimates based upon CAPM
 
-	# 0.5 * Vhat + 0.5 * rho * diag(dim(Vhat))
-
-	if(CAPM) Ehat = c(0.6, 0.7, 1.2, 0.9, 1.2) * 0.005 # estimates based upon CAPM
-
-	if(BAYES_lay){
-		Ehat = (0.5 * Ehat) + (0.5 * c(0.6, 0.7, 1.2, 0.9, 1.2 * 0.005)) # layman bayesian estimate
-		D = mean(diag(Vhat)) * diag(NCOL(Vhat)) # average of diagnonal * identity matrix
-		Vhat = 0.5 * Vhat + 0.5 * D # average of two matrices	
+	if(portfolio == "tangency"){ # tangency portfolio weights	
+		weight = solve(Vhat, Ehat) / sum(solve(Vhat, Ehat)) # no identity matrix
+		if(identity)
+			weight = solve(Vhat, Ehat) / (Ehat %*% solve(Vhat, Ehat) * 100) # with identity matrix
 	}
 
-	if(round_returns) Ehat = round(Ehat, 2) # round to 2 decimal places	
+	if(portfolio == "mvp"){ # min var portfolio weights
+		weight = solve(Vhat, i) / sum(solve(Vhat, i)) # lay calculation
+		if(identity)
+			weight = solve(Vhat, i) / (i %*% solve(Vhat, i)) # w/ identity matrix
+	}
 
-	if(portfolio == "tangency") 
-		weight = solve(Vhat, Ehat) / (Ehat %*% solve(Vhat, Ehat) * 100) # tangency portfolio weights
+	if(BAYES){
+		Ehat = (0.5 * Ehat) + (0.5 * c(0.6, 0.7, 1.2, 0.9, 1.2 * 0.005)) # layman bayesian estimate
+		D = mean(diag(Vhat)) * diag(NCOL(Vhat)) # average of diagnonal * identity matrix
+		Vb = 0.5 * Vhat + 0.5 * D # average of two matrices	
+		weight = solve(Vb, Ehat) / sum(solve(Vb, Ehat)) # no longer have to invert matrix
 
-	if(portfolio == "mvp") 
-		weight = solve(Vhat, i) / (i %*% solve(Vhat, i)) # min var portfolio weights
+	}
 
 	portfolio_rtrn = Ehat %*% weight # E * w'
-	portfolio_var = weight %*% Vhat %*% weight # w' * V * w
+	portfolio_var  = weight %*% Vhat %*% weight # w' * V * w
 
 	out = data.frame(E_rtrn = portfolio_rtrn, E_var = portfolio_var, t(weight))
 	return(out)
 }
 
+getPortfolio(data, portfolio = "tangency", identity = TRUE)
+getPortfolio(data, portfolio = "tangency", identity = FALSE)
+
+runStrategy <- function(data, init_period = 5,  ...){
+
+	ep = endpoints(data, on = "months")
+
+	result <- list()
+	k <- 0; while(TRUE){
+
+		period_end = ep[(1 + init_period * 12) + (k * 12)] # augment the data by period(k)
+		if(period_end == tail(ep, 1)) break # end run
+
+		data_insample = data[1:period_end]
+		data_outsample = data[ep[(1 + init_period * 12) + (1 + k * 12)]:ep[(1 + 6 * 12) + (k * 12)]]
+		
+		forecast_weights = getPortfolio(data_insample, ... = ...)[-(1:2)] # get weights
+		real_returns = data_outsample[ ,-grep("tbills", colnames(data_outsample))] # actual returns
+		period_returns = real_returns %*% t(forecast_weights)
+
+		result[[k + 1]] <- period_returns # store the returns for period k
+		k <- k + 1
+	}
+
+	portfolio_returns = do.call(rbind, result)
+	riskfree = data$tbills[-(1:(init_period * 12))] # first 60 periods is init training
+
+	sharpe_ratio = mean(portfolio_returns - riskfree) / sd(portfolio_returns - riskfree) # sharpe ratio
+	mean_return = mean(portfolio_returns)
+	out = data.frame(mean_return, sharpe_ratio)
+	return(out)	
+}
+
+runStrategy(data, portfolio = "tangency", CAPM = FALSE)
+runStrategy(data, portfolio = "tangency", identity = FALSE)
