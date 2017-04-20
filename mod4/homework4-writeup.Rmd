@@ -1,0 +1,241 @@
+---
+title: 'Portfolio Managment: Homework 4'
+author: "Gal Skarishevsky, Nathan Matare, Brian Thompson, Lior Sahaf"
+date: "April 19, 2017"
+output: word_document
+graphics: yes
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NA, message = FALSE,
+                      fig.width = 6, fig.height = 4.5, fig.align = "right")
+```
+
+```{r Load Config, include = FALSE, echo = FALSE, results = 'hide'}
+
+
+options("width" = 250)
+options(scipen  = 999)
+options(digits  = 003)
+
+library(xts); library(zoo); library(e1071); 
+library(ggplot2); library(knitr); library(gridExtra)
+library(reshape2); library(foreach); library(doMC)
+
+set.seed(666) # the devils seed
+
+username 	<- Sys.info()[["user"]]
+dir 		<- paste("/home/", username, "/Documents/Education/Chicago_Booth/Classes/35120_Portfolio_Management/portfolio_management/mod4", sep = ""); setwd(dir)
+
+# Data Preperation
+tbills <- read.csv("TB_7301_1612.csv", header = TRUE, stringsAsFactors = FALSE)
+stocks <- read.csv("STOCK_RETS.csv", header = TRUE, stringsAsFactors = FALSE)[ ,-1]
+
+data <- cbind(	
+			tbills, 
+			stocks[stocks$COMNAM == "EXXON MOBIL CORP" | stocks$COMNAM == "EXXON CORP", ], 
+			stocks[stocks$TICKER == "PG", ],
+			stocks[stocks$TICKER == "PFE", ],
+			stocks[stocks$TICKER == "INTC", ],
+			stocks[stocks$TICKER == "WMT", ]
+		)
+
+data <- as.xts(
+			apply(data[ ,c(2, 6, 10, 14, 18, 22)],2, as.numeric), 
+			order.by = as.Date(as.character(data[ ,1]), format = "%Y%m%d")
+		)
+colnames(data) <- c("tbills", "XOM","PG", "PFE", "INTC", "WMT")
+```
+
+# B.1. Estimating E and V by the sample estimates.
+
+We write the function '\texttt{getPortfolio}' that constructs the appropriate portfolio based upon the homework prompt. The default setting constructs a portfolio based upon sample estimates: $\hat{E}$ and $\hat{V}$. Otherwise, several arguments: '\texttt{round returns, identity, CAPM, BAYES}' override the default settings and control the type of estimation technique. Finally, the argument '\texttt{portfolio}' controls whether to calculate either the minimum variance portfolio or the tangency portfolio.
+
+```{r function_setup, include = TRUE, echo = TRUE}
+
+getPortfolio <- function(data, portfolio, round_returns = FALSE, 
+                         identity = FALSE, CAPM = FALSE, BAYES = FALSE){
+
+	rfree  = data$tbills # risk free returns
+	rtrns  = data[ ,-grep("tbills", colnames(data))] # expected returns
+	ertrns = apply(rtrns, 2, function(x) as.vector(x) - as.vector(rfree)) # rtrns - rfree
+
+	N = NCOL(ertrns) # number of assets
+	i = rep(1, N) # necessary column of ones for MVP
+	T = NROW(ertrns) # number or periods
+	Vhat = cov(rtrns) # covariance of expected returns
+	Ehat = apply(ertrns, 2, mean) # expectation of returns
+
+	if(round_returns) 
+		Ehat = round(Ehat, 2) # round to 2 decimal places	
+
+	if(CAPM) 
+		Ehat = c(0.6, 0.7, 1.2, 0.9, 1.2) * 0.005 # estimates based upon CAPM
+
+	if(portfolio == "tangency"){ # tangency portfolio weights	
+		weight = solve(Vhat, Ehat) / sum(solve(Vhat, Ehat)) # no identity matrix
+		if(identity) # with identity matrix
+			weight = solve(Vhat, Ehat) / (Ehat %*% solve(Vhat, Ehat) * 100) 
+	}
+
+	if(portfolio == "mvp"){ # min var portfolio weights
+		weight = solve(Vhat, i) / sum(solve(Vhat, i)) # lay calculation
+		if(identity)
+			weight = solve(Vhat, i) / (i %*% solve(Vhat, i)) # w/ identity matrix
+	}
+
+	if(BAYES){ # layman bayesian estimate
+		Ehat = (0.5 * Ehat) + (0.5 * c(0.6, 0.7, 1.2, 0.9, 1.2 * 0.005)) 
+		D = mean(diag(Vhat)) * diag(NCOL(Vhat)) # average of diagnonal * identity matrix
+		Vb = 0.5 * Vhat + 0.5 * D # average of two matrices	
+		weight = solve(Vb, Ehat) / sum(solve(Vb, Ehat)) # no longer have to invert matrix
+	}
+
+	portfolio_rtrn = Ehat %*% weight # E * w'
+	portfolio_var  = weight %*% Vhat %*% weight # w' * V * w
+
+	out = data.frame(E_rtrn = portfolio_rtrn, E_var = portfolio_var, t(weight))
+	return(list(out, Ehat, Vhat))
+}
+
+```
+
+## a)
+
+We compute the sample estimates of E and V, $\hat{E}$ and $\hat{V}$.
+
+```{r 1a, include = TRUE, echo = FALSE}
+Ehat = getPortfolio(data, portfolio = "tangency")[[2]]
+Vhat = getPortfolio(data, portfolio = "tangency")[[3]]
+
+kable(t(Ehat), digits = 6, caption = "Ehat")
+kable(Vhat, digits = 6, caption = "Vhat")
+```
+
+## b)
+
+We set the '\texttt{portfolio}' flag to '\texttt{tangency}', and compute the expected return, variance, and corresponding weights for the tangency portfolio:
+
+```{r 1b, include = TRUE, echo = FALSE}
+out = getPortfolio(data, portfolio = "tangency")[[1]]
+kable(out, digits = 6, caption = "Tangency")
+```
+
+The above weights are based upon sample estimates. While this procedure may provide unbiased estimators of both E and V, it lacks enough observations to be robust. That is, we only have 528 observations for five assets. As we will confirm later, this is a relatively large number of N(assets) to T(observations), and as such our estimates become unstable. More often than not, we will significantly deviate from the true value of E and V.
+
+## c)
+
+We set the '\texttt{portfolio}' flag to '\texttt{mvp}', and compute the expected return, variance, and corresponding weights for the minimum variance portfolio:
+
+```{r 1c, include = TRUE, echo = FALSE}
+out = getPortfolio(data, portfolio = "mvp")[[1]]
+kable(out, digits = 4, caption = "Minimum Variance Portfolio")
+```
+
+Naturally, because we were only concerned with minimizing the variance and expected return in our optimization routine, our total portfolio variance is much lower. Equally, our expected return is lower to  account for the lower amount of variance. We also observed differing weights than the previous tangency portfolio. 
+
+## d)
+
+Next, we set the '\texttt{round returns}' flag TRUE and round returns to two decimal points. 
+
+```{r 1d, include = TRUE, echo = FALSE}
+out = getPortfolio(data, portfolio = "tangency", round_returns = TRUE)[[1]]
+kable(out, digits = 4, caption = "Tangency (Rounded) Portfolio")
+```
+
+For such a seemingly small change in our estimated returns, our total variance, return, and corresponding weights are dramatically different. Given our previous discussion on the pitfalls of using $\hat{E}$ and $\hat{V}$ as estimators of E and V, it’s unsurprising that we realize such large deviations when only rounding by two decimal points. We would, however, expect that as our sample size (T) increases to infinity, such rounding errors would cancel out and our estimators would be more robust. 
+
+# B.2. Estimating V by the identity matrix.
+
+## a)
+
+We set the '\texttt{identity}' flag to TRUE and use the identity matrix in place of V. 
+
+```{r 2a, include = TRUE, echo = FALSE}
+out = getPortfolio(data, portfolio = "tangency", identity = TRUE)[[1]]
+kable(out, digits = 4, caption = "Tangency (Identity Matrix) Portfolio")
+```
+
+## b)
+
+Next, we set both the '\texttt{identity}' and '\texttt{round returns}' flag to TRUE and compare differences:
+
+```{r 2b, include = TRUE, echo = FALSE}
+out = getPortfolio(data, portfolio = "tangency", identity = TRUE, round_returns = TRUE)[[1]]
+kable(out, digits = 4, caption = "Tangency (Identity Matrix Rounded) Portfolio")
+```
+
+As before we notice a slight difference between the estimated mean return, variance, and corresponding weights-- although the effect is much less pronounced; each metric is notably more stable than before. This, again, is due to our previously listed problems. That is, when N is large relative to T, our sample covariance matrix, $\hat{V}$, cannot be robustly inverted. And although we may understate correlations by using this method, it is more ‘general’ in that whatever estimation errors were uncovered from the naive $\hat{V}$ sample estimate, we are able to average away with the off diagonal identity matrix. 
+
+# B.3. Estimating E using the CAPM
+
+Now we set the '\texttt{CAPM}' flag to TRUE and estimate our portfolio metrics:
+
+```{r 33, include = TRUE, echo = FALSE}
+out = getPortfolio(data, portfolio = "tangency", CAPM = TRUE)[[1]]
+kable(out, digits = 4, caption = "Tangency (CAPM) Portfolio")
+```
+
+Our portfolio expected return, variance, and corresponding weights are quite dissimilar to the sample estimate. Whereas the naive sample estimate allocated over 46% of the portfolio to a single asset, the CAPM weighted portfolio only allocates at most 39% of the portfolio to a single asset. Equally, the expected return is much lower. These two insights lead us to believe that the CAPM portfolio construction should be a more appropriate estimate of the portfolio parameters.
+
+# B.4. Estimating E and V using Bayesian/shrinkage techniques.
+
+We set the '\texttt{BAYES}' flag to TRUE, and compute the expected returns, variance, and corresponding weights for the tangency portfolio:
+
+```{r 34, include = TRUE, echo = FALSE}
+out = getPortfolio(data, portfolio = "tangency", BAYES = TRUE)[[1]]
+kable(out, digits = 4, caption = "Tangency (Bayesian) Portfolio")
+```
+
+We ostensibly recover an impressive portfolio return and sensible portfolio weights, albeit by shorting WMT. While we expect the Bayesian estimate to be the most robust, we hypothesize this expected return is either the result of a coding error or massive over-fitting. That is, we know post-ante what the optimal Bayesian priors should be, and subsequently average them with the post-ante average CAPM beta loadings. It's therefore unsurprising how well our returns appear to be doing; what will be more interesting, however, is whether or not we realize similar returns out-of-sample. 
+
+# B.5. Dynamic portfolio rebalancing.
+
+We write the function '\texttt{runStrategy}' that dynamically rebalances a portfolio given input parameters to our previously written  '\texttt{getPortfolio}' function. 
+
+```{r function2_setup, include = TRUE, echo = TRUE}
+
+runStrategy <- function(data, init_period = 5,  ...){
+
+	ep = endpoints(data, on = "months")
+
+	result <- list()
+	k <- 0; while(TRUE){
+
+		period_end = ep[(1 + init_period * 12) + (k * 12)] # augment the data by period(k)
+		if(period_end == tail(ep, 1)) break # end run
+
+data_insample = data[1:period_end]
+data_outsample = data[ep[(1 + init_period * 12) + (1 + k * 12)]:ep[(1 + 6 * 12) + (k * 12)]]
+		
+forecast_weights = getPortfolio(data_insample, ... = ...)[[1]][-(1:2)] # get weights
+real_returns = data_outsample[ ,-grep("tbills", colnames(data_outsample))] # actual returns
+period_returns = real_returns %*% t(forecast_weights)
+
+		result[[k + 1]] <- period_returns # store the returns for period k
+		k <- k + 1
+	}
+
+	portfolio_returns = do.call(rbind, result)
+	riskfree = data$tbills[-(1:(init_period * 12))] # first 60 periods is init training
+
+	sharpe_ratio = mean(portfolio_returns - riskfree) / sd(portfolio_returns - riskfree) 
+	mean_return = mean(portfolio_returns)
+	out = data.frame(mean_return, sharpe_ratio)
+	return(out)	
+}
+```
+
+```{r 3, include = TRUE, echo = TRUE}
+base = runStrategy(data, portfolio = "tangency")
+identity = runStrategy(data, portfolio = "tangency", identity = TRUE)
+capm = runStrategy(data, portfolio = "tangency", CAPM = TRUE)
+bayes = runStrategy(data, portfolio = "tangency", BAYES = TRUE)
+
+out <- rbind(base, identity, capm, bayes)
+rownames(out) <- c("Base", "Identity", "CAPM", "Bayes")
+kable(t(out), digits = 6, caption = "Strategy Comparison ")
+```
+
+As expected, portfolio one and two are close in mean return and Sharpe Ratio. However, the methodology used to compute their correlation structure effected the extent to which they differ. Notably, portfolio two has a much higher Sharpe Ratio, albeit a slightly lower mean return. Both the CAPM and Bayesian approaches yield similar results. Earlier, we hypothesized that our seemingly outlandish in-sample returns generated from a Bayesian portfolio construction could have been due to either a coding error or over-fitting. We affirm our conjecture here. Whereas the one period in-sample portfolio construction yielded abnormally high returns, the Bayesian approach—when applied over multiple periods and tested out-of-sample does slightly worse than a CAPM portfolio allocation.  
