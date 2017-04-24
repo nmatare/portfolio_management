@@ -39,7 +39,7 @@ data <- as.xts(
 colnames(data) <- c("tbills", "XOM","PG", "PFE", "INTC", "WMT")
 
 # Analysis
-getPortfolio <- function(data, portfolio, round_returns = FALSE, identity = FALSE, CAPM = FALSE, BAYES = FALSE){
+.getPortfolio <- function(data, portfolio, round_returns = FALSE, identity = FALSE, CAPM = FALSE, BAYES = FALSE){
 
 	rfree  = data$tbills # risk free returns
 	rtrns  = data[ ,-grep("tbills", colnames(data))] # expected returns
@@ -74,18 +74,42 @@ getPortfolio <- function(data, portfolio, round_returns = FALSE, identity = FALS
 		D = mean(diag(Vhat)) * diag(NCOL(Vhat)) # average of diagnonal * identity matrix
 		Vb = 0.5 * Vhat + 0.5 * D # average of two matrices	
 		weight = solve(Vb, Ehat) / sum(solve(Vb, Ehat)) # no longer have to invert matrix
-
 	}
 
 	portfolio_rtrn = Ehat %*% weight # E * w'
 	portfolio_var  = weight %*% Vhat %*% weight # w' * V * w
 
 	out = data.frame(E_rtrn = portfolio_rtrn, E_var = portfolio_var, t(weight))
-	return(out)
+	return(list(out, Ehat, Vhat))
 }
 
-getPortfolio(data, portfolio = "tangency", identity = TRUE)
-getPortfolio(data, portfolio = "tangency", identity = FALSE)
+Ehat = getPortfolio(data, portfolio = "tangency")[[2]]
+Vhat = getPortfolio(data, portfolio = "tangency")[[3]]
+
+kable(t(Ehat), digits = 4)
+kable(Vhat, digits = 4)
+
+out = getPortfolio(data, portfolio = "tangency")[[1]]
+kable(out, digits = 4)
+
+out = getPortfolio(data, portfolio = "mvp")[[1]]
+kable(out, digits = 4)
+
+out = getPortfolio(data, portfolio = "tangency", round_returns = TRUE)[[1]]
+kable(out, digits = 4)
+
+out = getPortfolio(data, portfolio = "tangency", identity = TRUE)[[1]]
+kable(out, digits = 4)
+
+out = getPortfolio(data, portfolio = "tangency", identity = TRUE, round_returns = TRUE)[[1]]
+kable(out, digits = 4)
+
+out = getPortfolio(data, portfolio = "tangency", CAPM = FALSE)[[1]]
+kable(out, digits = 4)
+
+out = getPortfolio(data, portfolio = "tangency", BAYES = TRUE)[[1]]
+kable(out, digits = 4)
+
 
 runStrategy <- function(data, init_period = 5,  ...){
 
@@ -100,7 +124,7 @@ runStrategy <- function(data, init_period = 5,  ...){
 		data_insample = data[1:period_end]
 		data_outsample = data[ep[(1 + init_period * 12) + (1 + k * 12)]:ep[(1 + 6 * 12) + (k * 12)]]
 		
-		forecast_weights = getPortfolio(data_insample, ... = ...)[-(1:2)] # get weights
+		forecast_weights = getPortfolio(data_insample, ... = ...)[[1]][-(1:2)] # get weights
 		real_returns = data_outsample[ ,-grep("tbills", colnames(data_outsample))] # actual returns
 		period_returns = real_returns %*% t(forecast_weights)
 
@@ -117,5 +141,11 @@ runStrategy <- function(data, init_period = 5,  ...){
 	return(out)	
 }
 
-runStrategy(data, portfolio = "tangency", CAPM = FALSE)
-runStrategy(data, portfolio = "tangency", identity = FALSE)
+base = runStrategy(data, portfolio = "tangency")
+identity = runStrategy(data, portfolio = "tangency", identity = TRUE)
+capm = runStrategy(data, portfolio = "tangency", CAPM = TRUE)
+bayes = runStrategy(data, portfolio = "tangency", BAYES = TRUE)
+
+out <- rbind(base, identity, capm, bayes)
+rownames(out) <- c("Base", "Identity", "CAPM", "Bayes")
+kable(t(out), digits = 6)

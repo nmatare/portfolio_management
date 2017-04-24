@@ -14,6 +14,9 @@ V = sigma^2*(eye(N) + ones(N,N)*rho - diag(ones(N,1))*rho);
 % True tangency portfolio weights
 w_TP_true = inv(V)*E/(ones(1,N)*inv(V)*E);
 
+% MVP
+(inv(V) * ones(N, 1)) / (ones(1,N) * inv(V) * ones(N, 1))
+
 % Simulate excess returns on N assets in T periods, R~N(E,V)
 R = e + randn(T,N)*chol(V);    
 
