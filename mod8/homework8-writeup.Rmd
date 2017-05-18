@@ -1,7 +1,7 @@
 ---
-title: 'Portfolio Managment: Homework 4'
+title: 'Portfolio Managment: Homework 8'
 author: "Gal Skarishevsky, Nathan Matare, Brian Thompson, Lior Sahaf"
-date: "April 19, 2017"
+date: "May 18, 2017"
 output: pdf_document
 graphics: yes
 urlcolor: blue
@@ -195,4 +195,6 @@ Due to the quadractic term and incentive(1% fee after inflows) structure, the po
 
 ## d) 
 
-New money chases hot money. 
+New money chases hot money.  
+
+There holds a strong quadratic relationship between a funds past return and its future inflows. Although it may be that these well-performing funds continue to perform well into the future (more analysis needed), given our class discussion, notes, and referenced papers, this seems unlikely. And, noting that incentives are tied not only to raw return performance but also fund inflows, it appears that money managers stand to gain, in expectation, significant upside on risky investments.  
