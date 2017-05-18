@@ -1,0 +1,198 @@
+---
+title: 'Portfolio Managment: Homework 4'
+author: "Gal Skarishevsky, Nathan Matare, Brian Thompson, Lior Sahaf"
+date: "April 19, 2017"
+output: pdf_document
+graphics: yes
+urlcolor: blue
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = NA, message = FALSE,
+                      fig.width = 6, fig.height = 4.5, fig.align = "right")
+```
+
+```{r Load Config, include = FALSE, echo = FALSE, results = 'hide'}
+options("width" = 250)
+options(scipen  = 999)
+options(digits  = 003)
+
+library(xts); library(zoo); library(e1071); library(R.matlab)
+library(ggplot2); library(knitr); library(gridExtra); library(Hmisc)
+library(reshape2); library(foreach); library(doMC); library(data.table)
+
+set.seed(666) # the devils seed
+
+username 	<- Sys.info()[["user"]]
+dir 		<- paste("/home/", username, "/Documents/Education/Chicago_Booth/Classes/35120_Portfolio_Management/portfolio_management/mod8", sep = ""); setwd(dir)
+
+rets  <- t(readMat("rets_hwk7.mat")$rets)[-1, ] # -99 are NA values
+rets[rets == -99] <- NA
+colnames(rets) <- c("Date", paste("Fund", rep(1:(dim(rets)[2] - 1))))
+rets <- as.data.table(rets)
+
+flows <- t(readMat("flows_hwk7.mat")$flows)[-1, ] # first one is fund identifier
+flows[flows == -99] <- NA
+colnames(flows) <- c("Date", paste("Fund", rep(1:(dim(flows)[2] - 1))))
+flows <- as.data.table(flows)
+
+```
+
+# B.1. Estimating E and V by the sample estimates.
+
+stuff
+
+# B.2. Estimating the Performance-Flow Relation.
+
+We write the function '\texttt{EVALperformancetoflow}' that computes our desired question answers:
+
+```{r function_setup2, include = TRUE, echo = TRUE}
+
+EVAL_performance_to_flow <- function(year, graph = FALSE, ...){
+	data <- transpose(rbind(rets[Date == year], flows[Date == year + 1]))
+	colnames(data) <- c("returns", "inflows")
+	data <- na.omit(data[-1, ]) # remove year and remove NAs
+
+	data <- data[order(returns, decreasing = TRUE)]
+	data[ ,group_interval := cut_number(returns, n = 10)]
+	data[, decile := as.integer(group_interval)]
+	data[ ,avg_returns := mean(returns), by = group_interval]
+	data[ ,avg_flows := mean(inflows), by = group_interval]
+
+	data_per_decile <- data[!duplicated(avg_returns)]
+	linear <- lm(avg_flows ~ avg_returns + I(avg_returns ^ 2), data = data_per_decile)
+
+	data_per_decile[ ,hat_avg_flows := linear$fitted][ ,c("returns", "inflows") := NULL]
+
+	estimates <- rbind(
+					alpha_hat = summary(linear)$coefficients[,'Estimate'][1], 
+					beta_hat = summary(linear)$coefficients[,'Estimate'][2], 
+					charlie_hat = summary(linear)$coefficients[,'Estimate'][3],
+
+					alpha_se  = summary(linear)$coefficients[,'Std. Error'][1], 
+					beta_se  = summary(linear)$coefficients[,'Std. Error'][2], 
+					charlie_se  = summary(linear)$coefficients[,'Std. Error'][3]
+	); colnames(estimates) <- year
+
+	data <- merge(data, data_per_decile)
+
+	if(graph){
+
+		p <- ggplot(data = data, aes(decile, group = 1)) + 
+				geom_point(aes(y = avg_flows), color = "black") + 
+				geom_line(aes(y = avg_flows)) +
+				geom_line(aes(y = hat_avg_flows), color = "darkgrey", linetype = "dotted", size = 1.3) +
+				ggtitle(paste("Performance(", year, ") to Fund Flows(", year + 1, ")", sep = "")) +
+				labs(x = "Performance Deciles", y = "Average Fund Flow (t+1)") 
+		print(p)
+	}
+
+	return(list(data = data_per_decile, estimates = estimates))
+}
+
+```
+
+## a) i - iv. 
+ 
+We evaluate the performance-fund for 2001 and observe a convex pattern. As expected, the better performing the fund in the previous year, the more new funds flow into it. Further, our estimates (fitted_values) are highly correlated with the real values. This linear model explains much of the variation (in-sample, of course). All three of the coefficients appear to be highly significant. 
+
+```{r 2i, include = TRUE, echo = FALSE}
+out <- EVAL_performance_to_flow(year = 2001, graph = TRUE)
+```
+
+```{r 2ii, include = TRUE, echo = FALSE}
+kable(out$data, digits = 4, caption = "Average: Returns, Flows, Fitted Values by Decile")
+```
+
+```{r 2iii, include = TRUE, echo = FALSE}
+kable(t(out$estimates), digits = 4, caption = "Coefficients and Standard Errors")
+```
+
+## b) i.
+
+We write the function '\texttt{getStatSignif}' and compute our Fama-MacBeth estimates:
+
+```{r function_setup3, include = TRUE, echo = TRUE}
+years <- as.numeric(unlist(rets[,'Date'][-11])) # remove 2002
+performance <- lapply(years, EVAL_performance_to_flow)
+
+getStatSignif <- function(coef, ...){
+	FM_alpha_hat <- do.call(sum, lapply(performance, function(x) 
+	                    x$estimates[paste(coef, "_hat", sep = ""),])) / 10
+	FM_alpha_se  <- sd(unlist(lapply(performance, function(x) 
+	                    x$estimates[paste(coef, "_se", sep = ""),]))) / sqrt(10)
+	summary_stat <- cbind(FM_alpha_hat, FM_alpha_se)
+	colnames(summary_stat) <- NULL; rownames(summary_stat) <- coef
+	return(summary_stat)
+}
+
+```
+
+Confirming our results from above, the Fama-Macbeth approach is significant for all three coefficients, implying that the convexity pattern(charlie) is statistically signficant as well.
+
+```{r i, include = TRUE, echo = FALSE}
+coefs <- c("alpha", "beta", "charlie")
+coef_stats <- t(sapply(coefs, getStatSignif))
+colnames(coef_stats) <- c("Estimate", "Standard Error")
+kable(coef_stats, digits = 4, caption = "Fama-MacBeth Estimates")
+```
+
+## b) ii
+
+Next, we average the performance-flow per decile across years. We, again, observe a convex pattern:
+
+```{r iasdf, include = FALSE, echo = FALSE}
+total_summary <- do.call(rbind, lapply(performance, function(x) x$data))
+total_summary[ ,total_avg_flow := mean(avg_flows), by = decile]
+summary_data <- total_summary[!duplicated(decile)]
+```
+
+```{r ii, include = TRUE, echo = FALSE}
+ggplot(data = summary_data, aes(decile, group = 1)) + 
+	geom_point(aes(y = avg_flows), color = "black") + 
+	geom_line(aes(y = avg_flows)) +
+	ggtitle("Total Average Performance to Flow") +
+	labs(x = "Performance Deciles", y = "Average Fund Flow (t+1)") 
+```
+
+## c) i. 
+
+$\mathbb{E}$(A) = 1(0.01) + 0(0) = 0.01  
+$\mathbb{E}$(B) = -0.25(0.60) + 0.25(0.40) = -0.05
+
+Thus, choose A.
+
+## c) ii. 
+
+Given,
+
+Initial investment size = 100M  
+$\hat{a}$ = 0.04  
+$\hat{b}$ = 1.56  
+$\hat{c}$ = 4.44
+
+Scenario A:  
+$\hat{F_A}$ = 0.04 + 1.56 * 0.01 + 4.44(0.01^2) = 0.05  
+Year-end investment size = 105.6  
+$\mathbb{E_A}$(A) = 1.05M
+
+Scenario B:  
+$\hat{F_B}$ = 0.04 + 1.56 * 0.25 + 4.44(0.25^2) = 0.7075  
+Year-end investment size = 170.75  
+Fee(good) = 1.70M  
+
+$\hat{F_B}$ = 0.04 + 1.56 * -0.25 + 4.44(-0.25^2) = -0.0725  
+Year-end investment size = 92.75
+Fee(bad) = 9.275M   
+
+$\mathbb{E}$(B) = 0.40(1.70) + 0.60(0.92) = 1.23
+
+Thus, choose B.
+
+## c) iii. 
+
+Due to the quadractic term and incentive(1% fee after inflows) structure, the potential upside for investment B, even after factoring in the investment's riskyness (-0.25), is greater (1.23 > 1.05). Thus, a short term looking money manger would have greater incentives to take risky bets given their expected payoff. 
+
+## d) 
+
+New money chases hot money. 
