@@ -2,7 +2,7 @@
 title: 'Portfolio Managment: Homework 8'
 author: "Gal Skarishevsky, Nathan Matare, Brian Thompson, Lior Sahaf"
 date: "May 18, 2017"
-output: pdf_document
+output: word_document
 graphics: yes
 urlcolor: blue
 ---
@@ -44,7 +44,7 @@ stuff
 
 # B.2. Estimating the Performance-Flow Relation.
 
-We write the function '\texttt{EVALperformancetoflow}' that computes our desired question answers:
+We write the function '\texttt{EVALperformancetoflow}' that computes the answers to our desired questions:
 
 ```{r function_setup2, include = TRUE, echo = TRUE}
 
@@ -78,13 +78,13 @@ EVAL_performance_to_flow <- function(year, graph = FALSE, ...){
 
 	if(graph){
 
-		p <- ggplot(data = data, aes(decile, group = 1)) + 
-				geom_point(aes(y = avg_flows), color = "black") + 
-				geom_line(aes(y = avg_flows)) +
-				geom_line(aes(y = hat_avg_flows), color = "darkgrey", linetype = "dotted", size = 1.3) +
-				ggtitle(paste("Performance(", year, ") to Fund Flows(", year + 1, ")", sep = "")) +
-				labs(x = "Performance Deciles", y = "Average Fund Flow (t+1)") 
-		print(p)
+	p <- ggplot(data = data, aes(decile, group = 1)) + 
+		geom_point(aes(y = avg_flows), color = "black") + 
+		geom_line(aes(y = avg_flows)) +
+		geom_line(aes(y = hat_avg_flows), color = "darkgrey", linetype = "dotted", size = 1.3) +
+		ggtitle(paste("Performance(", year, ") to Fund Flows(", year + 1, ")", sep = "")) +
+		labs(x = "Performance Deciles", y = "Average Fund Flow (t+1)") 
+	print(p)
 	}
 
 	return(list(data = data_per_decile, estimates = estimates))
@@ -149,8 +149,8 @@ summary_data <- total_summary[!duplicated(decile)]
 
 ```{r ii, include = TRUE, echo = FALSE}
 ggplot(data = summary_data, aes(decile, group = 1)) + 
-	geom_point(aes(y = avg_flows), color = "black") + 
-	geom_line(aes(y = avg_flows)) +
+	geom_point(aes(y = total_avg_flow), color = "black") + 
+	geom_line(aes(y = total_avg_flow)) +
 	ggtitle("Total Average Performance to Flow") +
 	labs(x = "Performance Deciles", y = "Average Fund Flow (t+1)") 
 ```
@@ -182,8 +182,8 @@ Year-end investment size = 170.75
 Fee(good) = 1.70M  
 
 $\hat{F_B}$ = 0.04 + 1.56 * -0.25 + 4.44(-0.25^2) = -0.0725  
-Year-end investment size = 92.75
-Fee(bad) = 9.275M   
+Year-end investment size = 0.9275  
+Fee(bad) = 0.9275M   
 
 $\mathbb{E}$(B) = 0.40(1.70) + 0.60(0.92) = 1.23
 

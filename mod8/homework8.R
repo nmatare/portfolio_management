@@ -92,7 +92,11 @@ EVAL_performance_to_flow <- function(year, graph = FALSE, ...){
 	return(list(data = data_per_decile, estimates = estimates))
 }
 
-EVAL_performance_to_flow(year = 2001, graph = TRUE)
+out <- EVAL_performance_to_flow(year = 2001, graph = TRUE)
+
+kable(out$data, digits = 4, caption = "Average: Returns, Flows, Fitted Values by Decile")
+kable(t(out$estimates), digits = 4, caption = "Coefficients and Standard Errors")
+
 
 years <- as.numeric(unlist(rets[,'Date'][-11])) # remove 2002
 performance <- lapply(years, EVAL_performance_to_flow)
@@ -109,6 +113,7 @@ getStatSignif <- function(coef, ...){
 coefs <- c("alpha", "beta", "charlie")
 coef_stats <- t(sapply(coefs, getStatSignif))
 colnames(coef_stats) <- c("Estimate", "Standard Error")
+kable(coef_stats, digits = 4, caption = "Fama-MacBeth Estimates")
 
 total_summary <- do.call(rbind, lapply(performance, function(x) x$data))
 total_summary[ ,total_avg_flow := mean(avg_flows), by = decile]
@@ -119,3 +124,6 @@ ggplot(data = summary_data, aes(group_interval, group = 1)) +
 	geom_line(aes(y = avg_flows)) +
 	ggtitle("Total Average Performance to Flow") +
 	labs(x = "Performance Deciles *estimates", y = "Average Fund Flow (t+1)") 
+
+
+# B.3
