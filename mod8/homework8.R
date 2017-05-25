@@ -24,7 +24,7 @@ fund_holding <- as.xts(fund_holding[ ,-1], order.by = as.Date(paste0(as.characte
 fund_holding <- cbind(market_weight = fund_holding[ ,1], tbill_weight = 1 - fund_holding[ ,1])
 
 fund_factors <- read.table("ff_factors_192607_201612.txt", header = TRUE)
-fund_factors <- as.xts(fund_factors[ ,-1], order.by = as.Date(paste0(as.character(fund_factors[,1]), '01'), format='%Y%m%d')) #/ 100
+fund_factors <- as.xts(fund_factors[ ,-1], order.by = as.Date(paste0(as.character(fund_factors[,1]), '01'), format='%Y%m%d')) / 100
 
 data <- na.omit(cbind(fund_factors, fund_holding)) # only evaluate manager performance
 
@@ -34,8 +34,8 @@ data$y <- data$unconditional_alpha - data$RF
 
 data <- cbind(tbills, stocks[ ,-1])
 
-
-
+data$Mkt.RF * data$market_weight
+data$RF * data$tbill_weight
 
 # B.2
 
@@ -92,7 +92,7 @@ EVAL_performance_to_flow <- function(year, graph = FALSE, ...){
 	return(list(data = data_per_decile, estimates = estimates))
 }
 
-out <- EVAL_performance_to_flow(year = 2001, graph = TRUE)
+out <- EVAL_performance_to_flow(year = 1992, graph = TRUE)
 
 kable(out$data, digits = 4, caption = "Average: Returns, Flows, Fitted Values by Decile")
 kable(t(out$estimates), digits = 4, caption = "Coefficients and Standard Errors")
@@ -120,8 +120,8 @@ total_summary[ ,total_avg_flow := mean(avg_flows), by = decile]
 summary_data <- total_summary[!duplicated(decile)]
 
 ggplot(data = summary_data, aes(group_interval, group = 1)) + 
-	geom_point(aes(y = avg_flows), color = "black") + 
-	geom_line(aes(y = avg_flows)) +
+	geom_point(aes(y = total_avg_flow), color = "black") + 
+	geom_line(aes(y = total_avg_flow)) +
 	ggtitle("Total Average Performance to Flow") +
 	labs(x = "Performance Deciles *estimates", y = "Average Fund Flow (t+1)") 
 
