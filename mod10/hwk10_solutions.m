@@ -97,13 +97,13 @@ pos = sum(ret_m>0)/sum(ret_m>-inf);
 sr_riteput = mean(ret_m-21*tb_ret)/std(ret_m);
 sr_sp = mean(ret_sp_m-21*tb_ret)/std(ret_sp_m);
 tot_comp = sum(compens_m);
-%figure(1)
-%subplot(2,1,1)
-%end_date = thedate;
-%alive = find(dates>=beg_date & dates<=end_date);
-%plot(alive,capitals_d,'-',alive,zeros(size(alive)),'--');
-%set(gca,'XLim',[alive(1)-20 alive(end)+30])
-%set(gca,'YLim',[-10 max(capitals_d)+20])
+figure(1)
+subplot(2,1,1)
+end_date = thedate;
+alive = find(dates>=beg_date & dates<=end_date);
+plot(alive,capitals_d,'-',alive,zeros(size(alive)),'--');
+set(gca,'XLim',[alive(1)-20 alive(end)+30])
+set(gca,'YLim',[-10 max(capitals_d)+20])
 %f1 = find(frst_day_of_year);
 %v = f1(f1>=alive(1) & f1<=alive(end));
 %set(gca,'XTick',v);

@@ -125,18 +125,19 @@ runStrategy <- function(ledger = data, ...){
 			# record option price and number
 			coredata(ledger)[index(ledger) == period_date][3] <- bs_put
 			coredata(ledger)[index(ledger) == period_date][5] <- num_puts
+
+			# compute compensation and metrics
+			rtrn 		= (new_capital - old_capital) / old_capital
+			coredata(ledger)[index(ledger) == period_date][6] <- rtrn
+
+			compensation = (0.02 / 12 + 0.20 * max(rtrn - 21 * tbill_return, 0)) * old_capital
+			new_capital  = new_capital - compensation
+
+			# record capital and others
+			coredata(ledger)[index(ledger) == period_date][7] <- compensation
 		}
 
-		# compute compensation and metrics
-		rtrn 		= (new_capital - old_capital) / old_capital
-		coredata(ledger)[index(ledger) == period_date][6] <- rtrn
-
-		compensation = (0.02 / 12) + (0.20 * max(rtrn - 21 * tbill_return, 0)) * old_capital
-		new_capital  = new_capital - compensation
-
-		# record capital and others
 		coredata(ledger)[index(ledger) == period_date][4] <- new_capital
-		coredata(ledger)[index(ledger) == period_date][7] <- compensation
 		k <- k + 1
 	}
 
