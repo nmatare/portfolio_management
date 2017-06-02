@@ -1,7 +1,7 @@
 ---
-title: 'Portfolio Managment: Homework 8'
+title: 'Portfolio Managment: Homework 10'
 author: "Gal Skarishevsky, Nathan Matare, Brian Thompson, Lior Sahaf"
-date: "May 18, 2017"
+date: "June 1, 2017"
 output: word_document
 graphics: yes
 urlcolor: blue
@@ -13,188 +13,449 @@ knitr::opts_chunk$set(echo = TRUE, comment = NA, message = FALSE,
 ```
 
 ```{r Load Config, include = FALSE, echo = FALSE, results = 'hide'}
+
 options("width" = 250)
 options(scipen  = 999)
-options(digits  = 003)
+# options(digits  = 003)
 
 library(xts); library(zoo); library(e1071); library(R.matlab)
 library(ggplot2); library(knitr); library(gridExtra); library(Hmisc)
-library(reshape2); library(foreach); library(doMC); library(data.table)
+library(reshape2); library(foreach); library(doMC)
 
 set.seed(666) # the devils seed
 
 username 	<- Sys.info()[["user"]]
-dir 		<- paste("/home/", username, "/Documents/Education/Chicago_Booth/Classes/35120_Portfolio_Management/portfolio_management/mod8", sep = ""); setwd(dir)
+dir 		<- paste("/home/", username, "/Documents/Education/Chicago_Booth/Classes/35120_Portfolio_Management/portfolio_management/mod10", sep = ""); setwd(dir)
 
-rets  <- t(readMat("rets_hwk7.mat")$rets)[-1, ] # -99 are NA values
-rets[rets == -99] <- NA
-colnames(rets) <- c("Date", paste("Fund", rep(1:(dim(rets)[2] - 1))))
-rets <- as.data.table(rets)
+data <- read.csv("sp500_daily.csv", header = TRUE)
+data <- as.xts(data[ ,-1], order.by = as.Date(as.character(data[,1]), format = "%Y%m%d"))
 
-flows <- t(readMat("flows_hwk7.mat")$flows)[-1, ] # first one is fund identifier
-flows[flows == -99] <- NA
-colnames(flows) <- c("Date", paste("Fund", rep(1:(dim(flows)[2] - 1))))
-flows <- as.data.table(flows)
+tbill_return = 0.0001
 
 ```
 
-# B.1. Estimating E and V by the sample estimates.
+# B. Data Analysis 
 
-stuff
+In order to conduct the analysis we write three functions: '\texttt{computeOptionPrice}', '\texttt{runStrategy}', '\texttt{getSharpeRatio}', . computeOptionPrice outputs the standard Black-Scholes option price of a security given input parameters; runStrategy runs the strategy proposed in the question set; and getSharpeRatio computes the Sharpe Ratio of a set of strategies:
 
-# B.2. Estimating the Performance-Flow Relation.
-
-We write the function '\texttt{EVALperformancetoflow}' that computes the answers to our desired questions:
+*Note there is a small bug somewhere in the code where the calculations do not match up exactly with the Professor's provided code.
 
 ```{r function_setup2, include = TRUE, echo = TRUE}
 
-EVAL_performance_to_flow <- function(year, graph = FALSE, ...){
-	data <- transpose(rbind(rets[Date == year], flows[Date == year + 1]))
-	colnames(data) <- c("returns", "inflows")
-	data <- na.omit(data[-1, ]) # remove year and remove NAs
+computeOptionPrice <- function(S, K, T, rf, sigma){
+	# Implementation of theBlack-Scholes Option Value
+	# S is the price of the stock
+	# K is the strike price
+	# rf is the risk free rate
+	# T is the time
+	# sigma is the implied s&p volatility
+	d1 <- (log(S/K)+(rf+sigma^2/2)*T)/(sigma*sqrt(T))
+	d2 <- d1 - sigma * sqrt(T)
 
-	data <- data[order(returns, decreasing = TRUE)]
-	data[ ,group_interval := cut_number(returns, n = 10)]
-	data[, decile := as.integer(group_interval)]
-	data[ ,avg_returns := mean(returns), by = group_interval]
-	data[ ,avg_flows := mean(inflows), by = group_interval]
+	call <- S*pnorm(d1) - K*exp(-rf*T)*pnorm(d2)
+	put <- call + K*exp(-T*rf) - S 
+	# put <- K*exp(-rf*T) * pnorm(-d2) - S*pnorm(-d1) 
+	# alternative way of doing same calc
 
-	data_per_decile <- data[!duplicated(avg_returns)]
-	linear <- lm(avg_flows ~ avg_returns + I(avg_returns ^ 2), data = data_per_decile)
+	return(list(bs_call = call, bs_put = put))
+}
 
-	data_per_decile[ ,hat_avg_flows := linear$fitted][ ,c("returns", "inflows") := NULL]
+runStrategy <- function(ledger = data, startdate, moneyness, beg_capital, 
+                        target_return, sp_volatility, tbill_return, ...){
 
-	estimates <- rbind(
-					alpha_hat = summary(linear)$coefficients[,'Estimate'][1], 
-					beta_hat = summary(linear)$coefficients[,'Estimate'][2], 
-					charlie_hat = summary(linear)$coefficients[,'Estimate'][3],
+	# cut ledger based upon startdate
+	start_date  <- as.Date(as.character(startdate), format = "%Y%m%d")
+	ledger 		<- ledger[which(index(ledger) == start_date):NROW(ledger)]
 
-					alpha_se  = summary(linear)$coefficients[,'Std. Error'][1], 
-					beta_se  = summary(linear)$coefficients[,'Std. Error'][2], 
-					charlie_se  = summary(linear)$coefficients[,'Std. Error'][3]
-	); colnames(estimates) <- year
+	ledger$bs_put 		<- NA
+	ledger$capital 		<- NA
+	ledger$N 			<- NA
+	ledger$returns 		<- NA
+	ledger$compensation <- NA
+	ledger$index_return <- NA
 
-	data <- merge(data, data_per_decile)
+	monthly_eps <- endpoints(ledger, on = "months")[-1]
+	daily_eps 	<- endpoints(ledger, on = "days")[-1]
 
-	if(graph){
+	# init portfolio
+	stock_price  = first(ledger)$spindx
+	strike_price = first(ledger)$spindx * moneyness
+	first_put <- computeOptionPrice(
+					S = stock_price,
+					K = strike_price,
+					T = 60,
+					rf = tbill_return, 
+					sigma = sp_volatility
+				)$bs_put
+  # number of puts needed for target return
+	num_puts 	= target_return * beg_capital / as.numeric(first_put) 
+	new_capital = beg_capital * (1 + target_return); # targeted return
 
-	p <- ggplot(data = data, aes(decile, group = 1)) + 
-		geom_point(aes(y = avg_flows), color = "black") + 
-		geom_line(aes(y = avg_flows)) +
-		geom_line(aes(y = hat_avg_flows), color = "darkgrey", linetype = "dotted", size = 1.3) +
-		ggtitle(paste("Performance(", year, ") to Fund Flows(", year + 1, ")", sep = "")) +
-		labs(x = "Performance Deciles", y = "Average Fund Flow (t+1)") 
-	print(p)
+	# record first events
+	coredata(ledger)[1, 'capital']  <- new_capital
+	coredata(ledger)[1, 'bs_put']  	<- first_put
+	coredata(ledger)[1, 'N'] 		<- num_puts
+
+	# start loop
+	k <- 1; while(new_capital > 0){
+
+		ep 				<- 	daily_eps[1 + k] # daily endpoint
+		if(is.na(ep)) 		break
+
+		period_before 	<- last(index(ledger[1:ep]), 2)[1]
+		period_date 	<- last(index(ledger[1:ep]), 2)[2]
+
+		old_capital <- as.numeric(ledger[period_before]$capital) # starting capital
+		new_capital = old_capital * (1 + tbill_return) # appreciated interest
+
+		if(period_date %in% index(ledger[monthly_eps])){ # do at end of each month
+
+			# print(paste("Exercising options at the end of month:", period_date))
+
+			# write off old options
+			stock_price  = ledger[period_date]$spindx # get current price level
+			bs_put <- computeOptionPrice(
+					S = as.numeric(stock_price),
+					K = as.numeric(strike_price), # comes from init strike price or 30 days ago strike price
+					T = 30,
+					rf = tbill_return, 
+					sigma = sp_volatility
+				)$bs_put
+
+			bs_cost <- bs_put * num_puts # number of puts wrote in last period
+			new_capital = new_capital - bs_cost # update capital after puts are written off
+
+			# write new options
+			strike_price = ledger[period_date]$spindx * moneyness # get current strike price
+			bs_put <- computeOptionPrice(
+					S = as.numeric(stock_price),
+					K = as.numeric(strike_price), 
+					T = 60,
+					rf = tbill_return, 
+					sigma = sp_volatility
+				)$bs_put
+			
+      # number of puts needed for target return
+			num_puts = target_return * as.numeric(new_capital) / as.numeric(bs_put) 
+			new_capital = new_capital * (1 + target_return);
+
+			# record option price and number
+			coredata(ledger)[index(ledger) == period_date][3] <- bs_put
+			coredata(ledger)[index(ledger) == period_date][5] <- num_puts
+
+			# compute compensation and metrics
+			rtrn 		= (new_capital - old_capital) / old_capital
+			coredata(ledger)[index(ledger) == period_date][6] <- rtrn
+
+			# compute compensation
+			compensation = (0.02 / 12 + 0.20 * max(rtrn - 21 * tbill_return, 0)) * old_capital
+			new_capital  = new_capital - compensation
+
+			# compute monthly s&p returns
+			if(!exists("last_month")) last_month <- NA # init first month
+			current_return 	<- as.numeric(ledger[period_date]$spindx)
+			last_return 	<- as.numeric(ledger[last_month]$spindx)
+			index_return	= (current_return - last_return) / last_return
+			if(length(index_return) == 0) index_return <- 0
+			coredata(ledger)[index(ledger) == period_date][8] <- index_return
+
+			# record capital and others
+			last_month <- period_date
+			coredata(ledger)[index(ledger) == period_date][7] <- compensation
+		}
+
+		coredata(ledger)[index(ledger) == period_date][4] <- new_capital
+		k <- k + 1
 	}
 
-	return(list(data = data_per_decile, estimates = estimates))
+	# print("Ran out of money!")
+	end_ledger	<- ledger[1:which(index(ledger) == period_date)]
+	return(end_ledger)
+}
+
+getSharpeRatio <- function(ledger, tbill_return, ...){
+	SR_strategy <- mean(ledger$returns[-1] - 21 * tbill_return) / sd(ledger$returns[-1] )
+	SR_index 	<- mean(ledger$index_return[-1]  - 21 * tbill_return) / sd(ledger$index_return[-1] )
+	output <- data.frame(Strategy = SR_strategy, Index = SR_index)
+	return(output)
 }
 
 ```
 
-## a) i - iv. 
+\newpage
+
+# B.1. Suppose you started your hedge fund on March 1, 1994.
+
+## a) 
+
+We run the proposed strategy:
  
-We evaluate the performance-fund for 2001 and observe a convex pattern. As expected, the better performing the fund in the previous year, the more new funds flow into it. Further, our estimates (fitted_values) are highly correlated with the real values. This linear model explains much of the variation (in-sample, of course). All three of the coefficients appear to be highly significant. 
+```{r 11, include = TRUE, echo = FALSE, cache = TRUE}
+part1 <- runStrategy(
+	startdate = 19940301,
+	moneyness = 0.80,
+	beg_capital = 50, 
+	target_return = 0.04,
+	sp_volatility = sd(data$sprtrn),
+	tbill_return = 0.0001
+)
 
-```{r 2i, include = TRUE, echo = FALSE}
-out <- EVAL_performance_to_flow(year = 2001, graph = TRUE)
-```
-
-```{r 2ii, include = TRUE, echo = FALSE}
-kable(out$data, digits = 4, caption = "Average: Returns, Flows, Fitted Values by Decile")
-```
-
-```{r 2iii, include = TRUE, echo = FALSE}
-kable(t(out$estimates), digits = 4, caption = "Coefficients and Standard Errors")
-```
-
-## b) i.
-
-We write the function '\texttt{getStatSignif}' and compute our Fama-MacBeth estimates:
-
-```{r function_setup3, include = TRUE, echo = TRUE}
-years <- as.numeric(unlist(rets[,'Date'][-11])) # remove 2002
-performance <- lapply(years, EVAL_performance_to_flow)
-
-getStatSignif <- function(coef, ...){
-	FM_alpha_hat <- do.call(sum, lapply(performance, function(x) 
-	                    x$estimates[paste(coef, "_hat", sep = ""),])) / 10
-	FM_alpha_se  <- sd(unlist(lapply(performance, function(x) 
-	                    x$estimates[paste(coef, "_se", sep = ""),]))) / sqrt(10)
-	summary_stat <- cbind(FM_alpha_hat, FM_alpha_se)
-	colnames(summary_stat) <- NULL; rownames(summary_stat) <- coef
-	return(summary_stat)
-}
+output <- last(part1)
+kable(t(output), digits = 6, caption = "Last Date") 
 
 ```
 
-Confirming our results from above, the Fama-Macbeth approach is significant for all three coefficients, implying that the convexity pattern(charlie) is statistically signficant as well.
+Riteput goes out of business on 1998-08-31
 
-```{r i, include = TRUE, echo = FALSE}
-coefs <- c("alpha", "beta", "charlie")
-coef_stats <- t(sapply(coefs, getStatSignif))
-colnames(coef_stats) <- c("Estimate", "Standard Error")
-kable(coef_stats, digits = 4, caption = "Fama-MacBeth Estimates")
+```{r 12, include = TRUE, echo = FALSE}
+part1_strip <- na.omit(head(part1, -1)) # remove period where bankrupt
+
+ggplot(part1_strip, aes(x = Index, y = capital)) + 
+	geom_point() +
+	ggtitle("Monthly Evolution of Capital") +
+	labs(x = "Time", y = "Cumulative Capital") 
+
 ```
 
-## b) ii
+## b) 
 
-Next, we average the performance-flow per decile across years. We, again, observe a convex pattern:
+Riteput has all positive returns in this evaluation period (100%)
 
-```{r iasdf, include = FALSE, echo = FALSE}
-total_summary <- do.call(rbind, lapply(performance, function(x) x$data))
-total_summary[ ,total_avg_flow := mean(avg_flows), by = decile]
-summary_data <- total_summary[!duplicated(decile)]
+```{r 13, include = TRUE, echo = FALSE}
+output <- getSharpeRatio(part1_strip, tbill_return)
+kable(output, digits = 6, caption = "Sharpe Ratios")
+
 ```
 
-```{r ii, include = TRUE, echo = FALSE}
-ggplot(data = summary_data, aes(decile, group = 1)) + 
-	geom_point(aes(y = total_avg_flow), color = "black") + 
-	geom_line(aes(y = total_avg_flow)) +
-	ggtitle("Total Average Performance to Flow") +
-	labs(x = "Performance Deciles", y = "Average Fund Flow (t+1)") 
-```
+## c) 
 
-## c) i. 
-
-$\mathbb{E}$(A) = 1(0.01) + 0(0) = 0.01  
-$\mathbb{E}$(B) = -0.25(0.60) + 0.25(0.40) = -0.05
-
-Thus, choose A.
-
-## c) ii. 
-
-Given,
-
-Initial investment size = 100M  
-$\hat{a}$ = 0.04  
-$\hat{b}$ = 1.56  
-$\hat{c}$ = 4.44
-
-Scenario A:  
-$\hat{F_A}$ = 0.04 + 1.56 * 0.01 + 4.44(0.01^2) = 0.05  
-Year-end investment size = 105.6  
-$\mathbb{E_A}$(A) = 1.05M
-
-Scenario B:  
-$\hat{F_B}$ = 0.04 + 1.56 * 0.25 + 4.44(0.25^2) = 0.7075  
-Year-end investment size = 170.75  
-Fee(good) = 1.70M  
-
-$\hat{F_B}$ = 0.04 + 1.56 * -0.25 + 4.44(-0.25^2) = -0.0725  
-Year-end investment size = 0.9275  
-Fee(bad) = 0.9275M   
-
-$\mathbb{E}$(B) = 0.40(1.70) + 0.60(0.92) = 1.23
-
-Thus, choose B.
-
-## c) iii. 
-
-Due to the quadractic term and incentive(1% fee after inflows) structure, the potential upside for investment B, even after factoring in the investment's riskyness (-0.25), is greater (1.23 > 1.05). Thus, a short term looking money manger would have greater incentives to take risky bets given their expected payoff. 
+The Sharpe Ratio appears really good. But it's spurious, see below. 
 
 ## d) 
 
-New money chases hot money.  
+The Sharpe Ratio is based upon two metrics: backward looking returns and variance. Because our strategy essentially sells insurance against the market falling by more than 20%, naturally we reap steady returns with little deviation over the 'good' periods, periods when the market isn’t very volatile. However, when the market suffers a left tail event, a period when the market drops by more than 20%, we are forced to pay out our 'insurance' premiums.
 
-There holds a strong quadratic relationship between a funds past return and its future inflows. Although it may be that these well-performing funds continue to perform well into the future (more analysis needed), given our class discussion, notes, and referenced papers, this seems unlikely. And, noting that incentives are tied not only to raw return performance but also fund inflows, it appears that money managers stand to gain, in expectation, significant upside on risky investments.  
+
+```{r 1e, include = TRUE, echo = FALSE}
+ggplot(part1_strip, aes(x = Index, y = compensation)) + 
+	geom_point() +
+	ggtitle("Monthly Evolution of Compensation") +
+	labs(x = "Time", y = "Monthly Compensation") 
+
+output <- data.frame(compensation = sum(part1_strip$compensation))
+kable(output, digits = 6, caption = "Total Compensation") #total compensation
+
+```
+
+## e) 
+
+Although RitePut reaps a significant compensation, RitePut is essentially gambling with investor's money. There is little skill involved in this strategy. RitePut is selling insurance against an unlikely, however inevitable, event. At some point RitePut will be wiped out by the huge loss. 
+
+## f) 
+
+Because the market became less volatile and reached a local price level minimum of 445. That is, the prior monthly returns experienced much more variance, and a 20% market drop was more likely in such a time period. Further, February’s price level was 467, and January’s was 481, both higher. You correctly found the local minimum were the market wouldn’t decrease more than 20%
+
+# B.2. Answer all numerical questions in part 1 (without plots) when options are 15% and 10% out of the money (instead of 20%). 
+
+(Below) We set adjust the moneyness: (moneyness = 0.85). Riteput goes out of business on 1998-10-31, two months later than before. Better. However, the Sharpe Ratio is much worse. This is because we're now incorporating the negative returns and large standard deviations into the calculation. However, our compensation is much higher as we're able to persist longer given that we pay out at smaller left tail events (15% drop as opposed to 20% drop)
+
+```{r 1211, include = TRUE, echo = FALSE, cache = TRUE}
+part2 <- runStrategy(
+	startdate = 19940301,
+	moneyness = 0.85,
+	beg_capital = 50, 
+	target_return = 0.04,
+	sp_volatility = sd(data$sprtrn),
+	tbill_return = 0.0001
+)
+
+part2_strip <- na.omit(head(part2, -1)) # remove period where bankrupt
+output <- last(part2)
+kable(t(output), digits = 6, caption = "Last Date") 
+
+output <- getSharpeRatio(part2_strip, tbill_return)
+kable(output, digits = 6, caption = "Sharpe Ratios")
+
+output <- data.frame(compensation = sum(part2_strip$compensation))
+kable(output, digits = 6, caption = "Total Compensation") #total compensation
+
+```
+
+(Below) We set the moneyness to 90%: (moneyness = 0.90). In this case, Riteput doesn't go out of business. However, the Sharpe Ratio is much worse. This is because we're now incorporating the negative returns and large standard deviations into the calculation. However, our compensation is much higher as we're able to persist much longer than either a 20% or 15% moneyness. Now we pay out smaller premiums when the market drops below 10%, and given the amount of capital we have accumulated, we're able to cover our losses while continuing to charge a premium for our supposed 'skilled' service. 
+
+```{r 12112, include = TRUE, echo = FALSE, cache = TRUE}
+part2 <- runStrategy(
+	startdate = 19940301,
+	moneyness = 0.90,
+	beg_capital = 50, 
+	target_return = 0.04,
+	sp_volatility = sd(data$sprtrn),
+	tbill_return = 0.0001
+)
+
+part2_strip <- na.omit(head(part2, -1)) # remove period where bankrupt
+output <- last(part2)
+kable(t(output), digits = 6, caption = "Last Date") 
+
+output <- getSharpeRatio(part2_strip, tbill_return)
+kable(output, digits = 6, caption = "Sharpe Ratios")
+
+output <- data.frame(compensation = sum(part2_strip$compensation))
+kable(output, digits = 6, caption = "Total Compensation") #total compensation
+
+```
+
+# B.3. Suppose you can start your hedge fund on the 1st trading day of any month
+
+## a) in the early 1980s, between January 1980 and December 1985
+
+We run the proposed strategy:
+ 
+```{r 55, include = TRUE, echo = FALSE, cache = TRUE}
+part1 <- runStrategy(
+	startdate = 19820226,
+	moneyness = 0.80,
+	beg_capital = 50, 
+	target_return = 0.04,
+	sp_volatility = sd(data$sprtrn),
+	tbill_return = 0.0001
+)
+
+output <- last(part1)
+kable(t(output), digits = 6, caption = "Last Date") 
+
+```
+
+```{r 552, include = TRUE, echo = FALSE}
+part1_strip <- na.omit(head(part1, -1)) # remove period where bankrupt
+ggplot(part1_strip, aes(x = Index, y = capital)) + 
+	geom_point() +
+	ggtitle("Monthly Evolution of Capital") +
+	labs(x = "Time", y = "Cumulative Capital") 
+
+```
+
+```{r 553, include = TRUE, echo = FALSE}
+output <- getSharpeRatio(part1_strip, tbill_return)
+kable(output, digits = 6, caption = "Sharpe Ratios")
+
+```
+
+```{r 556, include = TRUE, echo = FALSE}
+ggplot(part1_strip, aes(x = Index, y = compensation)) + 
+	geom_point() +
+	ggtitle("Monthly Evolution of Compensation") +
+	labs(x = "Time", y = "Monthly Compensation") 
+
+output <- data.frame(compensation = sum(part1_strip$compensation))
+kable(output, digits = 6, caption = "Total Compensation") #total compensation
+
+```
+
+Here, we notice that the first negative dip in capital doesn't come until late 1986. During this time period, we would want to start as early as possible. The fund collapsed toward late 1988 because of a large >20% drop in the market. RitePut, essentially, had to pay out huge premiums. 
+
+## b) in the 1990s, between January 1990 and December 1999
+
+We run the proposed strategy:
+ 
+```{r 525, include = TRUE, echo = FALSE, cache = TRUE}
+part1 <- runStrategy(
+	startdate = 19900226,
+	moneyness = 0.80,
+	beg_capital = 50, 
+	target_return = 0.04,
+	sp_volatility = sd(data$sprtrn),
+	tbill_return = 0.0001
+)
+
+output <- last(part1)
+kable(t(output), digits = 6, caption = "Last Date") 
+
+```
+
+```{r 5522, include = TRUE, echo = FALSE}
+part1_strip <- na.omit(head(part1, -1)) # remove period where bankrupt
+ggplot(part1_strip, aes(x = Index, y = capital)) + 
+	geom_point() +
+	ggtitle("Monthly Evolution of Capital") +
+	labs(x = "Time", y = "Cumulative Capital") 
+
+```
+
+```{r 5253, include = TRUE, echo = FALSE}
+output <- getSharpeRatio(part1_strip, tbill_return)
+kable(output, digits = 6, caption = "Sharpe Ratios")
+
+```
+
+```{r 5256, include = TRUE, echo = FALSE}
+ggplot(part1_strip, aes(x = Index, y = compensation)) + 
+	geom_point() +
+	ggtitle("Monthly Evolution of Compensation") +
+	labs(x = "Time", y = "Monthly Compensation") 
+
+output <- data.frame(compensation = sum(part1_strip$compensation))
+kable(output, digits = 6, caption = "Total Compensation") #total compensation
+
+```
+
+During this period, we have a fairly optimal time to run the strategy. There is a small negative dip in capital in mid to late 1990 that affects the Sharpe Ratio and compensation. To optimize the performance metrics of this strategy, RitePut should start the fund in early 1991. The fund appears to have been wiped out by the tech-bubble burst. That is, the fund collapsed in late 1998 early 1999 because of a large >20% market drop. RitePut, essentially, had to pay out huge premiums. 
+
+## c) in the 2000s, between January 2000 and December 2016
+
+We run the proposed strategy:
+ 
+```{r 5d5, include = TRUE, echo = FALSE, cache = TRUE}
+part1 <- runStrategy(
+	startdate = 20010226,
+	moneyness = 0.80,
+	beg_capital = 50, 
+	target_return = 0.04,
+	sp_volatility = sd(data$sprtrn),
+	tbill_return = 0.0001
+)
+
+output <- last(part1)
+kable(t(output), digits = 6, caption = "Last Date") 
+
+```
+
+```{r 55d2, include = TRUE, echo = FALSE}
+part1_strip <- na.omit(head(part1, -1)) # remove period where bankrupt
+ggplot(part1_strip, aes(x = Index, y = capital)) + 
+	geom_point() +
+	ggtitle("Monthly Evolution of Capital") +
+	labs(x = "Time", y = "Cumulative Capital") 
+
+```
+
+```{r 55d3, include = TRUE, echo = FALSE}
+output <- getSharpeRatio(part1_strip, tbill_return)
+kable(output, digits = 6, caption = "Sharpe Ratios")
+
+```
+
+```{r 5d56, include = TRUE, echo = FALSE}
+ggplot(part1_strip, aes(x = Index, y = compensation)) + 
+	geom_point() +
+	ggtitle("Monthly Evolution of Compensation") +
+	labs(x = "Time", y = "Monthly Compensation") 
+
+output <- data.frame(compensation = sum(part1_strip$compensation))
+kable(output, digits = 6, caption = "Total Compensation") #total compensation
+
+```
+
+This fund barely survived its early periods where it experienced several large payouts due to negative market price movement. Thus, it would have been optimal to start this strategy in early 2003 right after the turbulence of the early 2000s. The fund then appeared to suffer several large payouts towards the end of its tenure before going negative; it was able to cover some of them, but ultimetly went under. Notably, the compensation does well while the performance of fund (Sharpe Ratio) is relatively poor (due to the negative payouts, and increased variance). 
+
+# B.4. What techniques can investors use to detect Riteput’s strategy?
+
+First, if one observes abnormally high Sharpe Ratios, that's the first indication. However, as we saw, this can be misleading. Thus a more robust technique an investor could use is to monitor the funds performance. That is, if one observes steady payouts without much variance one should be suspicious that said fund is simply offering insurance against extreme market events. 
+
+# B.5. Riteput is to Powerball as the duration of human pregnancy is to ...?
+
+The time it takes to fly to NYC from ORD. Human pregnancy lasts about 10 months, while the time it takes to fly to New York from Chicago is two hours. In this case, we are comparing the likelihood of an extreme event(flight time)happening relative to a longterm norm (pregancy). Given that a 20% drop in the market is an extreme tail event (more than 2SD), it's more appropriate to compare 10 months to 2 hours. One hour, in our opinion, would be even more extreme—or a 3SD event, perhaps a strategy that exploited 30% moneyness puts. 
+
+# B.6. What if anything have you learnt from this exercise?
+
+Be very careful about funds that promise steady returns, it's likely to be too good to be true. The fund, more likely, is just offering an insurance product to the broader market. If you time your entrance and exit into the fund well, it might pay off... but beware because you could stand to loose all your capital! And the incentive structure, read compensation, for the fund is not aligned in your best interest. That is, the fund gets to gamble with your money and make a killing while you bear all the risk—you could loose all your capital, while the fund walks away with a significant buck. 

@@ -1,0 +1,16 @@
+base
+zoo
+xts
+e1071
+R.matlab
+ggplot2
+knitr
+gridExtra
+lattice
+survival
+Formula
+Hmisc
+reshape2
+foreach
+iterators
+doMC
